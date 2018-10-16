@@ -463,7 +463,7 @@ class code:
     # removed a parameter. Add it back in if I go back to using the C code: dectype='sumprod2'        
     # ch contains the channel log-likelihood ratios. As this is an AWGN channel
     # this is given by: L(y_j) = 2(y_j)/sigma^2. Where sigma^2 is the channel noise variance. 
-    def decode(self, ch, corr_factor=0.7):
+    def decode(self, ch, dectype='sumprod2', corr_factor=0.7):
         vdeg = self.vdeg
         cdeg = self.cdeg
         intrlv = self.intrlv
@@ -482,7 +482,7 @@ class code:
         cdeg_p = self.cdeg.ctypes.data_as(ct.POINTER(ct.c_long))
         intrlv_p = self.intrlv.ctypes.data_as(ct.POINTER(ct.c_long))
         
-        msg = np.zeros(Nmsg)
+        '''msg = np.zeros(Nmsg)
 
         # sum product algorithm
         for itcount in range(MAX_ITCOUNT):
@@ -527,19 +527,18 @@ class code:
                     imsg +=1
 
             if not stopflag:
-                break 
+                break '''
 
-        # Rewriting below in python above so the code below is redundant.
         # call C function for the sum product algorithm
-        '''if dectype == 'sumprod':
+        if dectype == 'sumprod':
             it = c_ldpc.sumprod(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p)
         elif dectype == 'sumprod2':
             it = c_ldpc.sumprod2(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p)
         elif dectype == 'minsum':
             it = c_ldpc.minsum(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p, ct.c_double(corr_factor))
         else:
-            raise NameError('Decoder type unknonwn')'''
-        return app, itcount
+            raise NameError('Decoder type unknonwn')
+        return app, it
 
     def Lxor(self, L1, L2, corrflag=1):
         c_ldpc = ct.CDLL('./bin/c_ldpc.so')

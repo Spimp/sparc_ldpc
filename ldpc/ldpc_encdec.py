@@ -46,7 +46,9 @@ app, it = c.decode(Ly)
 xp = [app<0]
 xp = np.reshape(xp, -1)
 
-print(x.shape)
-print(xp.shape)
-print(error_count(x, xp))
+#print(x.shape)
+#print(xp.shape)
+errors = error_count(x, xp)
+print("Number of errors: ", errors)
+print("Error rate: ", (errors/len(x)))
 print(it)

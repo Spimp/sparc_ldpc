@@ -28,8 +28,8 @@ sim_param = [
     ("802.16","3/4",81,"A"),
     ("802.16","3/4",81,"B"),
     ("802.16","5/6",81,"A"),
-    ("802.11n","1/2",100,"A"),
-    ("802.11n","2/3",100,"A"),
+    ("802.11n","1/2",27,"A"),
+    ("802.11n","2/3",27,"A"),
     ("802.11n","3/4",27,"A"),
     ("802.11n","5/6",27,"A"),
     ("802.11n","1/2",54,"A"),
@@ -107,15 +107,15 @@ def sim(standard, rate, z, ptype='A'):
 
 
 if __name__ == "__main__":
-
-	res, parray = sim(*sim_param[1])
+	sim_param_number = 33
+	res, parray = sim(*sim_param[sim_param_number])
 	print("The size of parray is ", parray.size)
 	print("The size of res is", res)
-	plot(parray, res)
-	title(sim_param[0])
+	plot(parray, res)#np.log(res))
+	title(sim_param[sim_param_number])
 	xlabel('p')
-	ylabel('Bit errors')
-	savefig("sim_param2.png")
+	ylabel('BER')
+	savefig("testing_ldpc_results/sim_param34.png")
 	show()
 
 

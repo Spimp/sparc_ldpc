@@ -237,15 +237,6 @@ def sp2bp(β, L, M: "must be power of 2"):
     
 
 
-
-#code has functions which convert bits2bytes, bytes2bits, bits2indices, indices2bits
-#not sure if I'll actually need these. If I do someone has probably already written these in  python
-
-# insert bits2bytes fn if needed 
-
-# insert bytes2bits fn if needed 
-
-# insert bits2indices fn.
 # assumes that the left most bit (lmb) is the most significant bit (msb)
 # note that an input of all zero bits for one section will give an output of 0
 # So the first column is being indexed by 0
@@ -271,89 +262,6 @@ def bits2indices(bits, m: "m must be a power of 2"):
 
     return indices
 
-
-# insert indices2bits fn if needed 
-
-#Fn to run point-to-point SPARC-AMP simulation with an LDPC outer code protecting the flat sections.
-def lpdc_sim(sparcparams: SPARCParams, seed)	-> LDPCResult:	
-	#Get the SPARC parameters from the struct
-	L = sparcparms.L
-	M = sparcparams.M
-	p = sparcparams.p
-	sigma2 = sparcparams.sigma2
-	r = sparcparams.r
-	r_pa = sparcparams.r_pa
-	t = sparcparams.t
-
-
-	# pick ldpc code, get it's parameters
-
-
-	#compute remaining parameters
-	logm = int(log(m,2))
-	n = int((l * logm - (nl-kl))/r) #nl and kl are the ldpc parameters n and k
-
-
-	#set up random numbers generator
-	np.random.seed(seed)
-
-	#generate random user bits to transmit
-	num_sparc_bits = l * logm
-	num_user_bits = num_sparc_bits - (nl-kl)
-	user_bits = np.random.randint(0, 2, num_user_bits).tolist()
-
-	#split bits into amp bits and those that will be LDPC encoded
-	#What are the AMP bits? Aren't all bits AMP decoded.
-	amp_bits = user_bits[:(num_user_bits-kl)]
-	ldpc_user_bits = user_bits[(num_user_bits-kl):]
-
-	#LPDC encode those bits, via a mapping into bytes and back (this will determine if I need to bytes2bits fns etc.)
-
-	#gather the AMP bits and the LDPC codeword bits (the "SPARC" bits)
-	sparc_bits = amp_bits + ldpc_code_bits
-	#turn all the SPARC bits into column choices
-	#This is when I will need bits2indices
-	sparc_indices = bits2indices(sparc_bits, m)
-
-
-	#Make PA and FHT
-	#PA is the power allocation? And FHT is the design matrix?
-	#What are these? They are used for next comment. Is one the design matrix?
-
-	#Encode sparc indecs into an actual codeword. 
-
-	#generate channel noise and sum. 
-
-	#Run AMP decoded
-
-	#Gather the hard decision indices
-
-	#Convert indices back to bits
-
-	#Count bit errors in AMP alone. 
-
-	#Convert all column probabilities into bit probabilities.
-
-	#grab the LDPC bit probs, convert to LLRs, decode LDPC codeword
-
-	#Count bit error in LDPC section
-
-	#If LDPC worked, and there are errors in the unprotected bits, try running AMP again
-
-		#Make a new beta_ldpc that only has the ldpc sections set
-
-		#Compute a y that already has all the successfully decoded ldpc sections removed
-
-		#Run AMP over the non-LDPC sections from scratch
-
-		#Gather hard decision indices
-
-	#Convert indices back to bits
-
-	#Count bit errors in AMP unprotected bits
-
-	#RETURN the LDPC results using the above defined struct
-
 def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     #Get the SPARC parameters from the struct
     L = sparcparams.L
@@ -369,12 +277,15 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     snr = P / sigma**2
     #C = 0.5 * np.log2(1 + snr)
     n = int(L*np.log2(M) / r_sparc)
+    # compute additional parameters
+    logm = np.log2(M)
+    total_bits = int(logm*L)
     
     # Generate the power allocation
     # Pl = pa_iterative(L, L, sigma, P, R_PA)
     # uniform power allocation across sections
     Pl = P/L * np.ones(L)
-    logm = np.log2(M)
+
 
     if ldpcparams == None:
         # set params so that no ldpc encoding or decoding is used
@@ -407,12 +318,10 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     # Generate the remaining bits required
     unprotected_bits = np.random.randint(0, 2, int(L*logm-nl)).tolist()
 
-    # concatenate the ldpc and unprotected bits
-    #if len(ldpc_bits)>0:
-        
+    # concatenate the ldpc and unprotected bits      
     sparc_bits = unprotected_bits+ldpc_bits
 
-    assert len(sparc_bits)==int(L*logm)
+    assert len(sparc_bits)==total_bits
 
     # convert the bits to indices for encoding
     sparc_indices = bits2indices(sparc_bits, M)
@@ -453,8 +362,8 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     # Compute BER note: np.sum will be deprecated soon, so look up alternative if this code stops working. 
     # DeprecationWarning: Calling np.sum(generator) is deprecated, and in the future will give a different result. Use np.sum(np.from_iter(generator)) or the python sum builtin instead.
     # If this function starts acting weird, look into the above. Or when I transfer this function to my proper code, try to fix this. 
-    ber_amp = np.sum(bin(a^b).count('1')
-                 for (a, b) in zip(sparc_indices, rx_message))/(L*np.log2(M))
+    ber_amp = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/(L*logm)
+
 
     if ldpcparams==None:
         ber_ldpc = None
@@ -471,11 +380,11 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
 
         # only want to use the bitwise posterior for the sections we've applied the ldpc code to
         # recenter the bitwise posterior around zero for the decoding
-        LLR = np.log(1-bitwise_posterior[int((L*logm)-nl):])- np.log(bitwise_posterior[int((L*logm)-nl):])
+        LLR = np.log(1-bitwise_posterior[int(total_bits-nl):])- np.log(bitwise_posterior[int(total_bits-nl):])
 
         (app, it) = ldpc_code.decode(LLR)
         #print((np.ones(nl)/2)-bitwise_posterior[int((L*logm)-nl):])
-        test_output = (bitwise_posterior[int((L*logm)-nl):]>0.5)
+        test_output = (bitwise_posterior[int(total_bits-nl):]>0.5)
         print("Incorrect bits before ldpc decoding: ", np.sum(test_output!=ldpc_bits))
 
         # check that the inequality is the right way round in below
@@ -495,77 +404,16 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
 
             
         # compute BER for amp and ldpc
-        ber_ldpc = np.sum(bin(a^b).count('1')
-                     for (a, b) in zip(sparc_indices, beta_output))/(L*np.log2(M))
-
-    # Compute Eb/N0
-    #EbN0 = 1/(2*r) * (P/sigma**2)
+        ber_ldpc = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, beta_output))/(L*np.log2(M))
 
     # overall rate of the code
     R = (L*logm - (nl-kl))/n
-    
+
+    #Compute Eb/N0
+    EbN0 = 1/(2*R) * (P/sigma**2)
+   
     return ber_amp, ber_ldpc, R
 
-def amp_sim(L, M, σ_n, P, R, T, R_PA):
-    # Compute the SNR, capacity, and n, from the input parameters
-    #snr = P / σ_n**2 don't actually need snr and C
-    #C = 0.5 * np.log2(1 + snr)
-    # number of channel uses by the sparc code. 
-    n = int(L*np.log2(M) / R)
-    
-    # Generate the power allocation
-    # Pl = pa_iterative(L, L, σ_n, P, R_PA)
-    # uniform power allocation across sections
-    Pl = P/L * np.ones(L)
-    
-    # Generate random message in [0..M)^L
-    tx_message = np.random.randint(0, M, L).tolist()
-    
-    # Generate the SPARC transform functions A.beta and A'.z
-    Ab, Az = sparc_transforms(L, M, n)
-    
-    # Generate our transmitted signal X
-    β_0 = np.zeros((L*M, 1))
-    for l in range(L):
-        β_0[l*M + tx_message[l]] = np.sqrt(n * Pl[l])
-    x = Ab(β_0)
-
-    # check that the power has been allocated uniformly. 
-    print(np.mean(x**2))
-    
-    # Generate random channel noise and then received signal y
-    z = np.random.randn(n, 1) * σ_n
-    y = (x + z).reshape(-1, 1)
-        
-    # Run AMP decoding
-    β = amp(y, σ_n, Pl, L, M, T, Ab, Az).reshape(-1)
-    #The above is the section wise probabilities. I need to convert these to bitwise probabilities. 
-    
-    
-    #print(bitwise_posterior(β, L, M))
-    
-    # Convert decoded beta back to a message
-    rx_message = []
-    for l in range(L):
-        idx = np.argmax(β[l*M:(l+1)*M])
-        rx_message.append(idx)
-    
-    # Compute fraction of sections decoded correctly
-    correct = np.sum(np.array(rx_message) == np.array(tx_message)) / L
-    
-    # Compute BER note: np.sum will be deprecated soon, so look up alternative if this code stops working. 
-    ber = np.sum(bin(a^b).count('1')
-                 for (a, b) in zip(tx_message, rx_message))/(L*np.log2(M))
-    
-    # Compute Eb/N0
-    EbN0 = 1/(2*R) * (P/σ_n**2)
-    
-    return ber
-    '''return {
-        "L": L, "M": M, "sigma_n": σ_n, "P": P, "R": R, "T": T,
-        "snr": snr, "C": C, "n": n, "fc": correct, "R_PA": R_PA,
-        "ber": ber, "EbN0": EbN0, "ser": 1-correct
-    }'''
 
 
 
@@ -581,15 +429,20 @@ if __name__ == "__main__":
     r_sparc = 1
     r_pa_sparc = 1
     T = 64
-    sparcparams = SPARCParams(512, 512, 1, 4, 1, 1, 64)
-    # nl is the number of bits in that will be LDPC bits. 
+    sparcparams = SPARCParams(L, M, sigma, P, r_sparc, r_pa_sparc, T)
+    
+    
+    # The ldpc sections must be less than L and must be divisible by 8 to give an integer value for z
+    ldpc_sections = 400
+    # nl is the number of bits that will be LDPC bits. 
     # This is given by the no. bits per sections * the no. sections
     # Note the no. sections must be at least 8 to give something divisible by 24
-    nl = np.log2(512) * 8 * 50
-    print()
-    # Can get from nl to z 
+    nl = np.log2(512) * ldpc_sections
+    # Can get from nl to z. z determines the size of the protograph matrix
     z = int(nl/24)
-    ldpcparams = LDPCParams('802.16', '1/2', z)
+    standard = '802.16'
+    rate = '1/2'
+    ldpcparams = LDPCParams(standard, rate, z)
 
     (ber_amp, ber_ldpc, R) = amp_ldpc_sim(sparcparams, ldpcparams)
     print("ber_amp: ", ber_amp)

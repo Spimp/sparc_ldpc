@@ -359,9 +359,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     correct_amp = np.sum(np.array(rx_message) == np.array(sparc_indices)) / L
     print("Fraction of sections decoded correctly with amp: ", correct_amp)
     
-    # Compute BER note: np.sum will be deprecated soon, so look up alternative if this code stops working. 
-    # DeprecationWarning: Calling np.sum(generator) is deprecated, and in the future will give a different result. Use np.sum(np.from_iter(generator)) or the python sum builtin instead.
-    # If this function starts acting weird, look into the above. Or when I transfer this function to my proper code, try to fix this. 
+    # Compute BER for just sparc
     ber_amp = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/(L*logm)
 
 
@@ -372,19 +370,17 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         # This converts each section in β to a valid probability distribution.
         sectionwise_posterior = β/np.sqrt(n*P/L)
 
-
+        ldpc_sections = int(nl/logm)
         # convert sectionwise to bitwise posterior probabilities
-        bitwise_posterior = sp2bp(sectionwise_posterior, L, M) 
-        #print(np.sum(bitwise_posterior))
+        # only need the sections corresponding to ldpc code 
+        bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], L, M) 
 
-
-        # only want to use the bitwise posterior for the sections we've applied the ldpc code to
         # recenter the bitwise posterior around zero for the decoding
-        LLR = np.log(1-bitwise_posterior[int(total_bits-nl):])- np.log(bitwise_posterior[int(total_bits-nl):])
+        LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
 
         (app, it) = ldpc_code.decode(LLR)
         #print((np.ones(nl)/2)-bitwise_posterior[int((L*logm)-nl):])
-        test_output = (bitwise_posterior[int(total_bits-nl):]>0.5)
+        test_output = (bitwise_posterior>0.5)
         print("Incorrect bits before ldpc decoding: ", np.sum(test_output!=ldpc_bits))
 
         # check that the inequality is the right way round in below
@@ -422,6 +418,7 @@ if __name__ == "__main__":
     print(sp2bp(c, 2, 4))
 
     '''
+    
     M = 512
     L = 512
     sigma = 1
@@ -464,8 +461,10 @@ if __name__ == "__main__":
     R_PA = R
     # store the error rate for each snr
     error_rate = []
-    repeats = 1
-    for snr in range(snrc,10):
+    repeats = 10
+    snr_array = np.linspace(snrc, snrc+1, 11)
+    print(snr_array)
+    for snr in snr_array:
         # calculate the new value of P to adjust the snr
         P = snr * σ_n**2
         error = []
@@ -476,7 +475,7 @@ if __name__ == "__main__":
         aver_error = np.sum(error)
         error_rate.append(aver_error/repeats)
         
-    plot(range(snrc,10), error_rate)
+    plot(snr_array, error_rate)
     xlabel('snr')
     title("Parameters: L=512, M=512, σ_n=1, R=1, T=64, R_PA=1")
     ylabel('BER')

@@ -7,9 +7,9 @@ sim_param = [
     ("802.16","1/2",100,"A"),
     ("802.16","2/3",100,"A"),
     ("802.16","2/3",100,"B"),
-    ("802.16","3/4",3,"A"),
-    ("802.16","3/4",3,"B"),
-    ("802.16","5/6",3,"A"),
+    ("802.16","3/4",100,"A"),
+    ("802.16","3/4",100,"B"),
+    ("802.16","5/6",100,"A"),
     ("802.16","1/2",27,"A"),
     ("802.16","2/3",27,"A"),
     ("802.16","2/3",27,"B"),
@@ -62,10 +62,18 @@ def ch2llr(ch, p):
 # start with p that gives capicity equal to rate and then reduce p to increase the capacity. 
 def sim(standard, rate, z, ptype='A'):
 
+	# the below are the p which gives a channel capacity equal to the rate
+	# found by doing trial and error on C=1-(-p*np.log2(p)- (1-p)*np.log2(1-p))
 	if rate == "1/2":
 		p=0.11
 	elif rate == "2/3":
 		p=0.06
+	elif rate == "5/6":
+		# note may need to adjust lower bound on values in parray for this one
+		p=0.02459
+	elif rate == "3/4":
+		# note may also need to adjust lower bound
+		p=0.0415
 	else:
 		raise NameError("Rate unsupported")
 
@@ -80,7 +88,7 @@ def sim(standard, rate, z, ptype='A'):
 	print(mycode.K/N)
 
 	res = []
-	parray = np.linspace(p, 0.01, int(p*100))
+	parray = np.linspace(p, 0.001, 10)
 	print(parray)
 	for q in parray:
 		#print("q is ", q)
@@ -107,7 +115,7 @@ def sim(standard, rate, z, ptype='A'):
 
 
 if __name__ == "__main__":
-	sim_param_number = 33
+	sim_param_number = 5
 	res, parray = sim(*sim_param[sim_param_number])
 	print("The size of parray is ", parray.size)
 	print("The size of res is", res)
@@ -115,7 +123,7 @@ if __name__ == "__main__":
 	title(sim_param[sim_param_number])
 	xlabel('p')
 	ylabel('BER')
-	savefig("testing_ldpc_results/sim_param34.png")
+	savefig("testing_ldpc_results/sim_param6.png")
 	show()
 
 

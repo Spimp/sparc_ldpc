@@ -81,7 +81,7 @@ def sim(standard, rate, z, ptype='A'):
 	N = mycode.N # assuming I can get N in the same way I can get K
 	K = mycode.K
 
-	repeats = 200
+	repeats = 100
 
 	print(rate)
 	print(N)
@@ -125,7 +125,6 @@ if __name__ == "__main__":
 	ylabel('BER')
 	savefig("testing_ldpc_results/sim_param6.png")
 	show()
-
 
 
 

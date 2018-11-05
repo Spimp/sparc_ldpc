@@ -418,6 +418,7 @@ if __name__ == "__main__":
     print(sp2bp(c, 2, 4))
 
     '''
+    # Number of sections covered by ldpc code vs. BER.    
     
     M = 512
     L = 512
@@ -428,6 +429,10 @@ if __name__ == "__main__":
     T = 64
     sparcparams = SPARCParams(L, M, sigma, P, r_sparc, r_pa_sparc, T)
     
+    # This should give increments of 64 each time
+    # Ensures number of sections is divisible by 8. 
+    #ldpc_sections = linspace(0, 512, 9)
+
     
     # The ldpc sections must be less than L and must be divisible by 8 to give an integer value for z
     ldpc_sections = 400
@@ -438,7 +443,7 @@ if __name__ == "__main__":
     # Can get from nl to z. z determines the size of the protograph matrix
     z = int(nl/24)
     standard = '802.16'
-    rate = '1/2'
+    rate = '5/6'
     ldpcparams = LDPCParams(standard, rate, z)
 
     (ber_amp, ber_ldpc, R) = amp_ldpc_sim(sparcparams, ldpcparams)

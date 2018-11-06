@@ -590,7 +590,7 @@ if __name__ == "__main__":
     P3 = 2.4
     T = 64
 
-    repeats = 100
+    repeats = 10
     datapoints = 6
     R = linspace(0.5, 0.75, datapoints)
     BER1 = np.zeros(datapoints)

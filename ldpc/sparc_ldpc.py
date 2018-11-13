@@ -1,9 +1,10 @@
 import numpy as np
 import math as math
-from pylab import *
+from pylab import * 
 import py.ldpc as ldpc
 import matplotlib.pyplot as plt
 import time
+import csv
 
 
 # Code taken from Adam's python tutorial. 
@@ -135,13 +136,30 @@ def block_sub_fht(n, m, l, seed=0, ordering=None):
 #SPARC dictionary
 #Returns 2 functions Ab and Az which compute Aβ and A^Tz respectively.
 def sparc_transforms(L, M, n):
-    Ax, Ay, _ = block_sub_fht(n, M, L, ordering=None)
+    Ax, Ay, ordering = block_sub_fht(n, M, L, ordering=None)
+    def Ab(b):
+        return Ax(b).reshape(-1, 1) / np.sqrt(n)
+    def Az(z):
+        return Ay(z).reshape(-1, 1) / np.sqrt(n)
+    return Ab, Az, ordering
+# return the ordering
+# have second function which does the same but uses the previous ordering. And on fewer sections. 
+# Check it on some betas. Use same beta and check it's the same result. Set last sections of beta to zero 
+# For the second function just use the first L unprotected rows of the ordering. 
+
+
+#SPARC dictionary
+#Returns 2 functions Ab and Az which compute Aβ and A^Tz respectively.
+#Takes in the value of ordering so a smaller design matrix can be generated to run on 
+#just the unprotected sections for the second round of amp decoding. 
+def sparc_transforms_shorter(L, M, n, ordering):
+    # just use the first L unprotected rows of ordering
+    Ax, Ay, _ = block_sub_fht(n, M, L, ordering=ordering[:L,:])
     def Ab(b):
         return Ax(b).reshape(-1, 1) / np.sqrt(n)
     def Az(z):
         return Ay(z).reshape(-1, 1) / np.sqrt(n)
     return Ab, Az
-
 
 # the amp algorithm
 def amp(y, σ_n, Pl, L, M, T, Ab, Az):
@@ -159,7 +177,8 @@ def amp(y, σ_n, Pl, L, M, T, Ab, Az):
             return β
         last_τ = τ
         
-        s = β + Az(z)
+        # added astype to increase precision to avoid divide by zero in LLR
+        s = (β + Az(z)).astype(np.longdouble)
         rt_n_Pl = np.sqrt(n*Pl).repeat(M).reshape(-1, 1)
         u = s * rt_n_Pl / τ**2
         max_u = u.max()
@@ -323,7 +342,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         ldpc_bits = ldpc_code.encode(protected_bits).tolist() 
 
     # Generate the remaining bits required
-    unprotected_bits = np.random.randint(0, 2, int(L*logm-nl)).tolist()
+    unprotected_bits = np.random.randint(0, 2, int(total_bits-nl)).tolist()
 
     # concatenate the ldpc and unprotected bits      
     sparc_bits = unprotected_bits+ldpc_bits
@@ -336,7 +355,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     assert len(sparc_indices)==L
        
     # Generate the SPARC transform functions A.beta and A'.z
-    Ab, Az = sparc_transforms(L, M, n)
+    Ab, Az, ordering = sparc_transforms(L, M, n)
     
     # Generate our transmitted signal X
     β_0 = np.zeros((L*M, 1))
@@ -363,15 +382,16 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         rx_message.append(idx)
     
     # Compute fraction of sections decoded correctly with just AMP decoding
-    correct_amp = np.sum(np.array(rx_message) == np.array(sparc_indices)) / L
-    print("Fraction of sections decoded correctly with amp: ", correct_amp)
+    #correct_amp = np.sum(np.array(rx_message) == np.array(sparc_indices)) / L
+    #print("Fraction of sections decoded correctly with amp: ", correct_amp)
     
     # Compute BER for just sparc
-    ber_amp = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/(L*logm)
+    ber_amp = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/total_bits
 
 
     if ldpcparams==None:
         ber_ldpc = None
+        ber_ldpc_amp = None
     else:
         # Get the sectionwise posterior probabilities by dividing β by the power in each section. 
         # This converts each section in β to a valid probability distribution.
@@ -382,7 +402,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         # only need the sections corresponding to ldpc code 
         bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], ldpc_sections, M) 
 
-        # recenter the bitwise posterior around zero for the decoding
+        # computer the log likelihood ratio for decoding
         LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
 
         (app, it) = ldpc_code.decode(LLR)
@@ -397,16 +417,56 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         # convert the bits to indices
         beta_output_ldpc = bits2indices(v_output, M)
 
+        #### Compute performance with just amp and then ldpc
         beta_output = rx_message
-        beta_output[int(L - nl/logm):] = beta_output_ldpc
-        print(np.sum(rx_message[int(L - nl/logm):]!= beta_output_ldpc))
+        beta_output[L-ldpc_sections:] = beta_output_ldpc
         # compute fraction of sections decoded correctly with AMP followed by SPARC decoding
-        correct_ldpc = np.sum(np.array(beta_output) == np.array(sparc_indices))/L
-        print("Fractions of sections decoded correctly with amp and ldpc: ", correct_ldpc)
+        #correct_ldpc = np.sum(np.array(beta_output) == np.array(sparc_indices))/L
+        #print("Fractions of sections decoded correctly with amp and ldpc: ", correct_ldpc)
+
+        # compute BER for amp and ldpc
+        ber_ldpc = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, beta_output))/total_bits
+
+
+        # generate beta_ldpc which has the first L unprotected sections set to zero
+        # and the L ldpc sections will have exactly one non-zero entry per section. 
+        beta_ldpc = np.zeros((L*M, 1))
+        # using variable i because beta_output_L only has ldpc_sections number of entries. 
+        i=0
+        for l in range(L-ldpc_sections,L):
+            beta_ldpc[(l)*M + beta_output_ldpc[i]] = np.sqrt(n * Pl[l])
+            i+=1
+        x_ldpc = Ab(beta_ldpc)
+
+        # calculate a new value of the channel output which doesn't contain the contribution from 
+        # the ldpc sections.
+        y_new = y - x_ldpc
+
+        # Rerun amp decoding on the new input y_new over the unprotected sections.
+        L_unprotected = L-ldpc_sections
+        Ab_new, Az_new = sparc_transforms_shorter(L_unprotected, M, n, ordering)
+
+        beta_new = amp(y_new, sigma, Pl[:L_unprotected], L_unprotected, M, T, Ab_new, Az_new).reshape(-1)
+
+        # Convert decoded beta_new back to a message
+        # beta_new gives you the first L-ldpc_sections sections of the final received message. 
+        rx_message_final = []
+        for l in range(L_unprotected):
+            idx = np.argmax(beta_new[l*M:(l+1)*M])
+            rx_message_final.append(idx)
+
+
+        #beta_output = np.zeros(L)
+        beta_output[:L_unprotected] = rx_message_final
+        # don't need to do line below as they're already equal
+        #beta_output[L-ldpc_sections:] = beta_output_ldpc
+        # compute fraction of sections decoded correctly with AMP followed by SPARC decoding followed by amp.
+        #correct_ldpc = np.sum(np.array(beta_output) == np.array(sparc_indices))/L
+        #print("Fractions of sections decoded correctly with amp and ldpc and amp: ", correct_ldpc)
 
             
-        # compute BER for amp and ldpc
-        ber_ldpc = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, beta_output))/(L*np.log2(M))
+        # compute BER for amp and ldpc and amp again.
+        ber_ldpc_amp = sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, beta_output))/total_bits
 
     # overall rate of the code
     R = (L*logm - (nl-kl))/n
@@ -414,7 +474,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     #Compute Eb/N0
     #EbN0 = 1/(2*R) * (P/sigma**2)
    
-    return ber_amp, ber_ldpc, R
+    return ber_amp, ber_ldpc, ber_ldpc_amp, R
 
 
 
@@ -422,6 +482,63 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
+    ''' Delete this code soon. Just saving incase I want to recheck it when I'm less sleepy. 
+    # testing to see if new, smaller design matrix and Az work
+    L = 1024
+    L_ldpc = 256
+    M = 512
+    logm = int(np.log2(M))
+    r_sparc = 1
+    n = int(L*np.log2(M) / r_sparc)
+    L_unprotected = L-L_ldpc
+    P=1
+
+    # Generate the remaining bits required
+    bits = np.random.randint(0, 2, L*logm).tolist()
+
+    # convert the bits to indices for encoding
+    beta = bits2indices(bits, M)
+
+    Ab, Az, ordering = sparc_transforms(L, M, n)
+
+    # want to keep the value of n the same as this determines the number of rows and we want to keep the number of rows constant
+    # It is just giving us an effectively lower rate
+    Ab_u, Az_u = sparc_transforms_shorter(L_unprotected, M, n, ordering)
+    Pl = P/L * np.ones(L)
+     # Generate our transmitted signal X
+    β_0 = np.zeros((L*M, 1))
+    for l in range(L):
+        β_0[l*M + beta[l]] = np.sqrt(n * Pl[l])
+
+
+    β_0[(L-L_ldpc)*M:] = np.zeros(L_ldpc*M).reshape(-1,1)
+    beta_2 = β_0[:(L-L_ldpc)*M]
+    
+
+    assert(sum(β_0)==sum(beta_2))  
+    x = Ab(β_0)
+    x2 = Ab_u(beta_2)
+
+    size = x2.size
+    print(x[:size]-x2)
+    assert((x[:size]==x2).all())
+    assert(sum(x[size:])==0)
+
+    a = Az(x)
+    b = Az_u(x2)
+    size2 = b.size
+    print(sum(a[size2:]))
+    print(a[:size2]-b)
+    assert((a[:size2]==b).all())
+    # this final assertion doesn't matter. We don't care what Az() does to the final values.
+    # as we want to essentially force these values to zero. As long as the first lot of values are the same
+    assert(sum(a[size2:])==0)
+   
+
+
+    # get the time so you can calculate the wall clock time of the process
+    t0 = time.time()
+    '''
     '''c = np.array([0.2, 0.3, 0.1, 0.4, 0.6, 0.4, 0, 0])
     print(sp2bp(c, 2, 4))
 
@@ -576,8 +693,181 @@ if __name__ == "__main__":
     plt.show()
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
+    
+    ########################################################
+    # keep snr fixed and vary the rate
+    # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
+    # SPARC without outer code. 
+    # sparc with outer code and amp only, will have a higher sparc rate than the overall and won't be getting the benefits from ldpc so will therefore perform worse
+    # sparc without outer code with have the same overall rate as the sparc with the LDPC applied so is a better comparison 
 
+    # Sparc parameters
+    L = 1024
+    M = 512
+    sigma = 1
+    # pick one of the 3 powers below 
+    P = 2.4
+    T = 64
+    # the rate at capacity for P and sigma
+    capacity = 1/2*np.log2(1 + P/sigma**2)
+    logm = np.log2(M)
 
+    # LDPC parameters
+    standard = '802.16'
+    r_ldpc = '5/6'
+    # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
+    # covering roughly 73% of sections like in Adams paper
+    sec = 512
+    # number of ldpc bits, must be divisible by 24
+    nl = logm * sec
+    z = int(nl/24)
+    ldpcparams = LDPCParams(standard, r_ldpc, z)
+        
+
+    repeats = 100
+    datapoints = 5
+    R = linspace(0.5, 0.9, datapoints)
+    print(len(R))
+    BER_amp = np.zeros(datapoints)
+    BER_ldpc = np.zeros(datapoints)
+    BER_ldpc_amp = np.zeros(datapoints)
+    BER_sparc = np.zeros(datapoints)
+
+    i=0
+    for r in R:
+        # need to change the 5/6 in here if I change r_ldpc.
+        n = (L*logm-nl*(1-5/6))/r
+        r_sparc = L*logm/n 
+        sparcparams_outer = SPARCParams(L, M, sigma, P, r_sparc, T)
+        sparcparams = SPARCParams(L, M, sigma, P, r, T)
+        BER_amp_rep = np.zeros(repeats)
+        BER_ldpc_rep = np.zeros(repeats)
+        BER_ldpc_amp_rep = np.zeros(repeats)
+        BER_sparc_rep = np.zeros(repeats)
+
+        for j in range(repeats):
+            (BER_amp_rep[j], BER_ldpc_rep[j], BER_ldpc_amp_rep[j], _) = amp_ldpc_sim(sparcparams_outer, ldpcparams)
+            (BER_sparc_rep[j],_,_,_) = amp_ldpc_sim(sparcparams, ldpcparams)
+
+        BER_amp[i] = np.sum(BER_amp_rep)/repeats
+        BER_ldpc[i] = np.sum(BER_ldpc_rep)/repeats
+        BER_ldpc_amp[i] = np.sum(BER_ldpc_amp_rep)/repeats
+        BER_sparc[i] = np.sum(BER_sparc_rep)/repeats
+        i+=1
+
+    # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
+    myFile = open('RVsBER_amp_ldpc_1.csv', 'a')
+    with myFile:
+        myFields = ['R', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
+        writer = csv.DictWriter(myFile, fieldnames=myFields)
+        writer.writeheader()
+        for k in range(len(R)):
+            writer.writerow({'R' : R[k], 'BER_amp' : BER_amp[k], 'BER_ldpc' : BER_ldpc[k], 'BER_ldpc_amp' : BER_ldpc_amp[k], 'BER_sparc' : BER_sparc[k]})
+    
+
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    ax.plot(R, BER_amp, 'k--', label = 'SPARC with outer code: AMP only')
+    ax.plot(R, BER_ldpc, 'k:', label = 'SPARC with outer code: after LDPC')
+    ax.plot(R, BER_ldpc_amp, 'k-', label = 'SPARC with outer code: after final AMP')
+    ax.plot(R, BER_sparc, 'k-.', label = 'SPARC with no outer code')
+    plt.axvline(x=capacity, color='r', linestyle='-', label='Shannon limit')
+    plt.xlabel('Overall Rate')
+    plt.ylabel('BER')
+    plt.legend()
+    print("Wall clock time elapsed: ", time.time()-t0)
+    plt.savefig('RVsBER_amp_ldpc_1.png')
+    
+    '''
+    ########################################################
+    # Keep rate fixed and vary the snr
+    # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
+    # SPARC without outer code. 
+    # sparc with outer code and amp only, will have a higher sparc rate than the overall and won't be getting the benefits from ldpc so will therefore perform worse
+    # sparc without outer code with have the same overall rate as the sparc with the LDPC applied so is a better comparison 
+
+    #Compute Eb/N0
+    #EbN0 = 1/(2*R) * (P/sigma**2)
+    # Sparc parameters
+    L = 1024
+    M = 512
+    logm = np.log2(M)
+    sigma = 1
+    r_sparc = 0.75
+    T = 64
+
+    logm = np.log2(M)
+
+    # LDPC parameters
+    standard = '802.16'
+    r_ldpc = '5/6'
+    # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
+    # covering roughly 73% of sections like in Adams paper
+    sec = 256
+    # number of ldpc bits, must be divisible by 24
+    nl = logm * sec
+    z = int(nl/24)
+    ldpcparams = LDPCParams(standard, r_ldpc, z)    
+
+    n = L*logm/r_sparc
+    R = (L*logm-nl*(1-5/6))/n
+    # need to change the 5/6 in here if I change r_ldpc.            
+    # the Eb/N0 at capacity 
+    snrc = 2**(2*R) - 1 
+    EbN0c = 1/(2*R) * snrc
+
+    repeats = 1
+    datapoints = 13
+    P = linspace(1.8, 3, datapoints)
+    BER_amp = np.zeros(datapoints)
+    BER_ldpc = np.zeros(datapoints)
+    BER_ldpc_amp = np.zeros(datapoints)
+    BER_sparc = np.zeros(datapoints)
+
+    i=0
+    for p in P:
+        sparcparams_outer = SPARCParams(L, M, sigma, p, r_sparc, T)
+        sparcparams = SPARCParams(L, M, sigma, p, R, T)
+        BER_amp_rep = np.zeros(repeats)
+        BER_ldpc_rep = np.zeros(repeats)
+        BER_ldpc_amp_rep = np.zeros(repeats)
+        BER_sparc_rep = np.zeros(repeats)
+
+        for j in range(repeats):
+            (BER_amp_rep[j], BER_ldpc_rep[j], BER_ldpc_amp_rep[j], _) = amp_ldpc_sim(sparcparams_outer, ldpcparams)
+            (BER_sparc_rep[j],_,_,_) = amp_ldpc_sim(sparcparams, ldpcparams)
+
+        BER_amp[i] = np.sum(BER_amp_rep)/repeats
+        BER_ldpc[i] = np.sum(BER_ldpc_rep)/repeats
+        BER_ldpc_amp[i] = np.sum(BER_ldpc_amp_rep)/repeats
+        BER_sparc[i] = np.sum(BER_sparc_rep)/repeats
+        i+=1
+
+    EbN0 = 1/(2*R) * (P/sigma**2)
+    # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
+    myFile = open('EbN0VsBER_amp_ldpc_1.csv', 'a')
+    with myFile:
+        myFields = ['EbN0', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
+        writer = csv.DictWriter(myFile, fieldnames=myFields)
+        writer.writeheader()
+        for k in range(length(R)):
+            writer.writerow({'EbN0' : EbN0[k], 'BER_amp' : BER_amp[k], 'BER_ldpc' : BER_ldpc[k], 'BER_ldpc_amp' : BER_ldpc_amp[k], 'BER_sparc' : BER_sparc[k]})
+    
+
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    ax.plot(EbN0, BER_amp, 'k--', label = 'SPARC with outer code: AMP only')
+    ax.plot(EbN0, BER_ldpc, 'k:', label = 'SPARC with outer code: after LDPC')
+    ax.plot(EbN0, BER_ldpc_amp, 'k-', label = 'SPARC with outer code: after final AMP')
+    ax.plot(EbN0, BER_sparc, 'k-.', label = 'SPARC with no outer code')
+    plt.axvline(x=EbN0c, color='r', linestyle='-', label='Shannon limit')
+    plt.xlabel('EbN0') # at some point need to work out how to write this so it outputs properly
+    plt.ylabel('BER')
+    plt.legend()
+    print("Wall clock time elapsed: ", time.time()-t0)
+    plt.savefig('EbN0VsBER_amp_ldpc_1.png')
+    '''
+    '''
     #########################################################
     # plot of performance of sparc code on it's own with a decreasing rate. 
     # Sparc parameters
@@ -590,7 +880,7 @@ if __name__ == "__main__":
     P3 = 2.4
     T = 64
 
-    repeats = 10
+    repeats = 1
     datapoints = 6
     R = linspace(0.5, 0.75, datapoints)
     BER1 = np.zeros(datapoints)
@@ -605,9 +895,9 @@ if __name__ == "__main__":
         BER2_rep = np.zeros(repeats)
         BER3_rep = np.zeros(repeats)
         for j in range(repeats):
-            (BER1_rep[j],_,_) = amp_ldpc_sim(sparc_params1)
-            (BER2_rep[j],_,_) = amp_ldpc_sim(sparc_params2)
-            (BER3_rep[j],_,_) = amp_ldpc_sim(sparc_params3)
+            (BER1_rep[j],_,_,_) = amp_ldpc_sim(sparc_params1)
+            (BER2_rep[j],_,_,_) = amp_ldpc_sim(sparc_params2)
+            (BER3_rep[j],_,_,_) = amp_ldpc_sim(sparc_params3)
         BER1[i] = np.sum(BER1_rep)/repeats
         BER2[i] = np.sum(BER2_rep)/repeats
         BER3[i] = np.sum(BER3_rep)/repeats
@@ -623,7 +913,7 @@ if __name__ == "__main__":
     plt.title("BER of the SPARC code as rate varies")
     print("Wall clock time elapsed: ", time.time()-t0)
     plt.savefig('sparc_RVsBER_1.png')
-    
+    '''
     '''
     #################################################################
     #Code to plot the performance of the sparc code on it's own for 

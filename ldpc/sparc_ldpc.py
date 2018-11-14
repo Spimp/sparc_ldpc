@@ -695,7 +695,7 @@ if __name__ == "__main__":
     plt.show()
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
-    '''
+    
     
     ########################################################
     # keep snr fixed and vary the rate
@@ -720,7 +720,7 @@ if __name__ == "__main__":
     r_ldpc = '5/6'
     # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
     # covering roughly 73% of sections like in Adams paper
-    sec = 512
+    sec = 768
     # number of ldpc bits, must be divisible by 24
     nl = logm * sec
     z = int(nl/24)
@@ -728,8 +728,8 @@ if __name__ == "__main__":
         
 
     repeats = 100
-    datapoints = 5
-    R = linspace(0.55, 0.95, datapoints)
+    datapoints = 6
+    R = linspace(0.2, 0.7, datapoints)
     BER_amp = np.zeros(datapoints)
     BER_ldpc = np.zeros(datapoints)
     BER_ldpc_amp = np.zeros(datapoints)
@@ -758,7 +758,7 @@ if __name__ == "__main__":
         i+=1
 
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
-    myFile = open('RVsBER_amp_ldpc_1.csv', 'a')
+    myFile = open('RVsBER_amp_ldpc_2.csv', 'a')
     with myFile:
         myFields = ['R', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
@@ -778,16 +778,16 @@ if __name__ == "__main__":
     plt.ylabel('BER')
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
-    plt.savefig('RVsBER_amp_ldpc_1.png')
+    plt.savefig('RVsBER_amp_ldpc_2.png')
     
-    '''
+    
     ########################################################
     # Keep rate fixed and vary the snr
     # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
     # SPARC without outer code. 
     # sparc with outer code and amp only, will have a higher sparc rate than the overall and won't be getting the benefits from ldpc so will therefore perform worse
     # sparc without outer code with have the same overall rate as the sparc with the LDPC applied so is a better comparison 
-
+    
     #Compute Eb/N0
     #EbN0 = 1/(2*R) * (P/sigma**2)
     # Sparc parameters
@@ -847,7 +847,7 @@ if __name__ == "__main__":
 
     EbN0 = 1/(2*R) * (P/sigma**2)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
-    myFile = open('EbN0VsBER_amp_ldpc_1.csv', 'a')
+    myFile = open('EbN0VsBER_amp_ldpc_2.csv', 'a')
     with myFile:
         myFields = ['EbN0', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
@@ -867,7 +867,7 @@ if __name__ == "__main__":
     plt.ylabel('BER')
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
-    plt.savefig('EbN0VsBER_amp_ldpc_1.png')
+    plt.savefig('EbN0VsBER_amp_ldpc_2.png')
     
     '''
     #########################################################

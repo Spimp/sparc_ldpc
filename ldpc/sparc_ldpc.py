@@ -364,7 +364,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     x = Ab(β_0)
     
     # check that the power has been allocated uniformly. This should be approx equal to one when divided by the snr. 
-    print("Average power/snr is ", np.mean(x**2)/snr)
+    #print("Average power/snr is ", np.mean(x**2)/snr)
 
     # Generate random channel noise and then received signal y
     z = np.random.randn(n, 1) * sigma
@@ -402,17 +402,18 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
         # only need the sections corresponding to ldpc code 
         bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], ldpc_sections, M) 
 
+        np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
         # computer the log likelihood ratio for decoding
         LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
 
         (app, it) = ldpc_code.decode(LLR)
 
         test_output = (bitwise_posterior>0.5)
-        print("Incorrect bits before ldpc decoding: ", np.sum(test_output!=ldpc_bits))
+        #print("Incorrect bits before ldpc decoding: ", np.sum(test_output!=ldpc_bits))
 
         # check that the inequality is the right way round in below
         v_output = (app<0.0)
-        print("Incorrect bits in ldpc decoding: ", np.sum(v_output!=ldpc_bits))
+        #print("Incorrect bits in ldpc decoding: ", np.sum(v_output!=ldpc_bits))
 
         # convert the bits to indices
         beta_output_ldpc = bits2indices(v_output, M)
@@ -627,7 +628,8 @@ if __name__ == "__main__":
     xlabel('Sections covered by ldpc')
     ylabel('BER')
     show()'''
-    '''################################################################
+    '''
+    ################################################################
     # Keep the sparc rate constant and then the snr we choose will give the same
     # BER each time. But vary the number of sections covered. This will vary the overall rate
     # Compare to a sparc code with the overall rate and see which performs better. 
@@ -693,6 +695,7 @@ if __name__ == "__main__":
     plt.show()
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
+    '''
     
     ########################################################
     # keep snr fixed and vary the rate
@@ -726,8 +729,7 @@ if __name__ == "__main__":
 
     repeats = 100
     datapoints = 5
-    R = linspace(0.5, 0.9, datapoints)
-    print(len(R))
+    R = linspace(0.55, 0.95, datapoints)
     BER_amp = np.zeros(datapoints)
     BER_ldpc = np.zeros(datapoints)
     BER_ldpc_amp = np.zeros(datapoints)
@@ -803,7 +805,7 @@ if __name__ == "__main__":
     r_ldpc = '5/6'
     # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
     # covering roughly 73% of sections like in Adams paper
-    sec = 256
+    sec = 768
     # number of ldpc bits, must be divisible by 24
     nl = logm * sec
     z = int(nl/24)
@@ -816,9 +818,9 @@ if __name__ == "__main__":
     snrc = 2**(2*R) - 1 
     EbN0c = 1/(2*R) * snrc
 
-    repeats = 1
-    datapoints = 13
-    P = linspace(1.8, 3, datapoints)
+    repeats = 100
+    datapoints = 8
+    P = linspace(1.5, 5.5, datapoints)
     BER_amp = np.zeros(datapoints)
     BER_ldpc = np.zeros(datapoints)
     BER_ldpc_amp = np.zeros(datapoints)
@@ -850,7 +852,7 @@ if __name__ == "__main__":
         myFields = ['EbN0', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
-        for k in range(length(R)):
+        for k in range(datapoints):
             writer.writerow({'EbN0' : EbN0[k], 'BER_amp' : BER_amp[k], 'BER_ldpc' : BER_ldpc[k], 'BER_ldpc_amp' : BER_ldpc_amp[k], 'BER_sparc' : BER_sparc[k]})
     
 
@@ -866,7 +868,7 @@ if __name__ == "__main__":
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
     plt.savefig('EbN0VsBER_amp_ldpc_1.png')
-    '''
+    
     '''
     #########################################################
     # plot of performance of sparc code on it's own with a decreasing rate. 

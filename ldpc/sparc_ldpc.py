@@ -780,7 +780,7 @@ if __name__ == "__main__":
     print("Wall clock time elapsed: ", time.time()-t0)
     plt.savefig('RVsBER_amp_ldpc_2.png')
     
-    
+    '''
     ########################################################
     # Keep rate fixed and vary the snr
     # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
@@ -868,7 +868,7 @@ if __name__ == "__main__":
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
     plt.savefig('EbN0VsBER_amp_ldpc_2.png')
-    
+    '''
     '''
     #########################################################
     # plot of performance of sparc code on it's own with a decreasing rate. 

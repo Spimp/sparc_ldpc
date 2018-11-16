@@ -727,7 +727,7 @@ if __name__ == "__main__":
     ldpcparams = LDPCParams(standard, r_ldpc, z)
         
 
-    repeats = 100
+    repeats = 200
     datapoints = 6
     R = linspace(0.2, 0.7, datapoints)
     BER_amp = np.zeros(datapoints)

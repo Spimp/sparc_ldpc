@@ -696,7 +696,7 @@ if __name__ == "__main__":
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
     
-    
+    '''
     ########################################################
     # keep snr fixed and vary the rate
     # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
@@ -727,9 +727,9 @@ if __name__ == "__main__":
     ldpcparams = LDPCParams(standard, r_ldpc, z)
         
 
-    repeats = 200
-    datapoints = 6
-    R = linspace(0.2, 0.7, datapoints)
+    repeats = 100
+    datapoints =7
+    R = linspace(0.3, 0.6, datapoints)
     BER_amp = np.zeros(datapoints)
     BER_ldpc = np.zeros(datapoints)
     BER_ldpc_amp = np.zeros(datapoints)
@@ -758,7 +758,7 @@ if __name__ == "__main__":
         i+=1
 
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
-    myFile = open('RVsBER_amp_ldpc_2.csv', 'a')
+    myFile = open('RVsBER_amp_ldpc_3.csv', 'a')
     with myFile:
         myFields = ['R', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
@@ -778,9 +778,9 @@ if __name__ == "__main__":
     plt.ylabel('BER')
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
-    plt.savefig('RVsBER_amp_ldpc_2.png')
-    
+    plt.savefig('RVsBER_amp_ldpc_3.png')
     '''
+    
     ########################################################
     # Keep rate fixed and vary the snr
     # plot of performance of sparc with outer code and amp only, after LDPC, after final AMP
@@ -791,11 +791,11 @@ if __name__ == "__main__":
     #Compute Eb/N0
     #EbN0 = 1/(2*R) * (P/sigma**2)
     # Sparc parameters
-    L = 1024
+    L = 768
     M = 512
     logm = np.log2(M)
     sigma = 1
-    r_sparc = 0.75
+    r_sparc = 0.94
     T = 64
 
     logm = np.log2(M)
@@ -805,7 +805,7 @@ if __name__ == "__main__":
     r_ldpc = '5/6'
     # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
     # covering roughly 73% of sections like in Adams paper
-    sec = 768
+    sec = 568
     # number of ldpc bits, must be divisible by 24
     nl = logm * sec
     z = int(nl/24)
@@ -813,10 +813,11 @@ if __name__ == "__main__":
 
     n = L*logm/r_sparc
     R = (L*logm-nl*(1-5/6))/n
+    print('Overall rate is: ', R)
     # need to change the 5/6 in here if I change r_ldpc.            
     # the Eb/N0 at capacity 
-    snrc = 2**(2*R) - 1 
-    EbN0c = 1/(2*R) * snrc
+    snrcdB = 20*np.log10(2**(2*R) - 1)
+    #EbN0c = 1/(2*R) * snrc
 
     repeats = 100
     datapoints = 8
@@ -844,31 +845,31 @@ if __name__ == "__main__":
         BER_ldpc_amp[i] = np.sum(BER_ldpc_amp_rep)/repeats
         BER_sparc[i] = np.sum(BER_sparc_rep)/repeats
         i+=1
-
-    EbN0 = 1/(2*R) * (P/sigma**2)
+    snrdB = 20*np.log10(P/sigma**2)
+    #EbN0 = 1/(2*R) * (P/sigma**2)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
-    myFile = open('EbN0VsBER_amp_ldpc_2.csv', 'a')
+    myFile = open('SNR_dBVsBER_amp_ldpc_1.csv', 'a')
     with myFile:
-        myFields = ['EbN0', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
+        myFields = ['SNR_dB', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
         for k in range(datapoints):
-            writer.writerow({'EbN0' : EbN0[k], 'BER_amp' : BER_amp[k], 'BER_ldpc' : BER_ldpc[k], 'BER_ldpc_amp' : BER_ldpc_amp[k], 'BER_sparc' : BER_sparc[k]})
+            writer.writerow({'SNR_dB' : snrdB[k], 'BER_amp' : BER_amp[k], 'BER_ldpc' : BER_ldpc[k], 'BER_ldpc_amp' : BER_ldpc_amp[k], 'BER_sparc' : BER_sparc[k]})
     
 
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
-    ax.plot(EbN0, BER_amp, 'k--', label = 'SPARC with outer code: AMP only')
-    ax.plot(EbN0, BER_ldpc, 'k:', label = 'SPARC with outer code: after LDPC')
-    ax.plot(EbN0, BER_ldpc_amp, 'k-', label = 'SPARC with outer code: after final AMP')
-    ax.plot(EbN0, BER_sparc, 'k-.', label = 'SPARC with no outer code')
-    plt.axvline(x=EbN0c, color='r', linestyle='-', label='Shannon limit')
-    plt.xlabel('EbN0') # at some point need to work out how to write this so it outputs properly
+    ax.plot(snrdB, BER_amp, 'k--', label = 'SPARC with outer code: AMP only')
+    ax.plot(snrdB, BER_ldpc, 'k:', label = 'SPARC with outer code: after LDPC')
+    ax.plot(snrdB, BER_ldpc_amp, 'k-', label = 'SPARC with outer code: after final AMP')
+    ax.plot(snrdB, BER_sparc, 'k-.', color='g', label = 'SPARC with no outer code')
+    plt.axvline(x=snrcdB, color='r', linestyle='-', label='Shannon limit')
+    plt.xlabel('SNR') # at some point need to work out how to write this so it outputs properly
     plt.ylabel('BER')
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
-    plt.savefig('EbN0VsBER_amp_ldpc_2.png')
-    '''
+    plt.savefig('SNR_dBVsBER_amp_ldpc_1.png')
+    
     '''
     #########################################################
     # plot of performance of sparc code on it's own with a decreasing rate. 

@@ -819,7 +819,7 @@ if __name__ == "__main__":
     snrcdB = 20*np.log10(2**(2*R) - 1)
     #EbN0c = 1/(2*R) * snrc
 
-    repeats = 1
+    repeats = 100
     datapoints = 8
     P = linspace(1.5, 5.5, datapoints)
     BER_amp = np.zeros(datapoints)
@@ -848,7 +848,7 @@ if __name__ == "__main__":
     snrdB = 20*np.log10(P/sigma**2)
     #EbN0 = 1/(2*R) * (P/sigma**2)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
-    myFile = open('SNR_dBVsBER_amp_ldpc_1.csv', 'a')
+    myFile = open('SNR_dBVsBER_amp_ldpc_2.csv', 'a')
     with myFile:
         myFields = ['SNR_dB', 'BER_amp', 'BER_ldpc', 'BER_ldpc_amp', 'BER_sparc']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
@@ -868,7 +868,7 @@ if __name__ == "__main__":
     plt.ylabel('BER')
     plt.legend()
     print("Wall clock time elapsed: ", time.time()-t0)
-    plt.savefig('SNR_dBVsBER_amp_ldpc_1.png')
+    plt.savefig('SNR_dBVsBER_amp_ldpc_2.png')
     
     '''
     #########################################################

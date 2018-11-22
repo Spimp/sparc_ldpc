@@ -819,7 +819,7 @@ if __name__ == "__main__":
     snrcdB = 20*np.log10(2**(2*R) - 1)
     #EbN0c = 1/(2*R) * snrc
 
-    repeats = 100
+    repeats = 1
     datapoints = 8
     P = linspace(1.5, 5.5, datapoints)
     BER_amp = np.zeros(datapoints)

@@ -802,7 +802,11 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     BER_amp_2 = np.zeros(datapoints)
     # BER after first round of ldpc
     BER_ldpc = np.zeros(datapoints)
+    # BER after 2nd round ldpc
+    BER_ldpc_2 = np.zeros(datapoints)
     BER_bpsk = np.zeros(datapoints)
+    # BER of plain SPARC
+    BER_plain = np.zeros(datapoints)
 
     i=0
     for sigma in SIGMA:
@@ -810,21 +814,27 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
         BER_bpsk[i] = sim_ldpc(ldpcparams, sigma, MIN_ERRORS, MAX_BLOCKS)
 
         sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T)
+        # plain sparc with same overall rate for comparison
+        sparcparams_plain = SPARCParams(L, M, sigma, p, R, T) 
         # cumulative BER for amp and ldpc
         ber_cum_amp = 0
         ber_cum_ldpc = 0
+        ber_cum_ldpc2 = 0
+        ber_cum_plain = 0
         nblockerrors_ldpc = 0
         nblocks = 0
         while nblockerrors_ldpc < MIN_ERRORS:
-            (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_sim(sparcparams, ldpcparams, 1)
+            (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_sim(sparcparams, ldpcparams, 2)
+            (ber_thisblock_plain, _, _, _) = amp_ldpc_sim(sparcparams_plain)
             #print("BER amp:", ber_thisblock_amp)
             #print("BER ldpc: ", ber_thisblock_ldpc)
-            ber_thisblock_ldpc = ber_thisblock_ldpc[0]
             ber_thisblock_amp = ber_thisblock_amp[1]
 
             ber_cum_amp += ber_thisblock_amp
-            ber_cum_ldpc += ber_thisblock_ldpc
-            if ber_thisblock_ldpc:
+            ber_cum_ldpc += ber_thisblock_ldpc[0]
+            ber_cum_ldpc2 += ber_thisblock_ldpc[1]
+            ber_cum_plain += ber_thisblock_plain
+            if ber_thisblock_ldpc[0]:
                 nblockerrors_ldpc += 1
             nblocks += 1
 
@@ -833,6 +843,9 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
 
         BER_amp_2[i] = ber_cum_amp/nblocks
         BER_ldpc[i] = ber_cum_ldpc/nblocks
+        BER_ldpc_2[i] = ber_cum_ldpc2/nblocks
+        BER_plain[i] = ber_cum_plain/nblocks
+
 
         i+=1
 
@@ -843,21 +856,23 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
-        myFields = ['EbN0_dB', 'BER_ldpc', 'BER_amp_2', 'BER_bpsk']
+        myFields = ['EbN0_dB', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'BER_bpsk']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
         for k in range(datapoints):
-            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_bpsk': BER_bpsk[k]})
+            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'BER_bpsk': BER_bpsk[k]})
 
 
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
     ax.plot(EbN0_dB, BER_ldpc, 'k:', label = 'SPARC w/ outer code: after LDPC')
-    ax.plot(EbN0_dB, BER_amp_2, 'b--', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    ax.plot(EbN0_dB, BER_amp_2, 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+    ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
     ax.plot(EbN0_dB, BER_bpsk, 'g-', label = 'LDPC with BPSK modulation')
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
-    plt.xlabel('$E_b/N_0$ (dB)') # at some point need to work out how to write this so it outputs properly
-    plt.ylabel('BER')
+    plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
+    plt.ylabel('BER', fontsize=15)
     plt.tight_layout()
     plt.legend(loc=1, prop={'size': 8})
     plt.savefig(png_filename)
@@ -866,7 +881,7 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
 # sec is the number of LDPC sections. Number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
 # soft and hard are booleans determining if the function should calculate hard and soft BER
 # Note that you need to change the plotting depending on the number of rounds that you want to plot 
-def soft_hard_loop(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
+def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
     # Sparc parameters
     L = sparcparams.L
     M = sparcparams.M
@@ -896,7 +911,6 @@ def soft_hard_loop(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     SIGMA = linspace(0.8, 0.4, datapoints)
     BER_sparc = np.zeros(datapoints)
     if soft:
-        print(soft_iter)
         # Array of BER after ldpc decoding
         BER_ldpc_soft = np.zeros((datapoints, soft_iter))
         # Array of BER after AMP decoding
@@ -1010,24 +1024,25 @@ if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
 
-    '''
+    
     ##########################################
     # Plot waterfall curves
     # Compare ldpc with bpsk of rate 5/6 to a sparc with sparc rate 1 and ldpc rate 5/6 with all sections covered
     # to give a overall rate of 5/6
+    # And SPARC with no outer code and overall rate 5/6
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100.csv', png_filename='EbN0_dBVsBER_waterfall_rep100.png')
+    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_2.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_2.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
+    
     '''
-
     #########################################
     # Plot hard and soft loops
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    soft_hard_loop(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100.csv', png_filename='EbN0VsBER_soft_hard_100.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
+    soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_2.csv', png_filename='EbN0VsBER_soft_hard_100_2.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
     
     print("Wall clock time elapsed: ", time.time()-t0)
-    
+    '''

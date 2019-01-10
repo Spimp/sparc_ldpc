@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_2.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_2.png')
+    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_3.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_3.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
     

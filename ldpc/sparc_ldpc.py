@@ -1023,11 +1023,11 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
-    '''
+    
     #######################################
     # Plot plain SPARCs with different overall rates for a high number of repeats
 
-    repeats = 1
+    repeats = 200
     datapoints=15
     SIGMA = linspace(0.8, 0.4, datapoints)
     i=0
@@ -1057,6 +1057,7 @@ if __name__ == "__main__":
         ber_sparc1[i] = ber_sparc1_cum/repeats
         ber_sparc2[i] = ber_sparc2_cum/repeats
         ber_sparc3[i] = ber_sparc3_cum/repeats
+        i+=1
 
     p=1.8
     snr = (p/SIGMA**2)
@@ -1073,7 +1074,7 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.legend(loc=1, prop={'size': 8})
     plt.savefig('Plain_sparc_diff_rates.png')
-    '''
+    
     
     '''
     ##########################################
@@ -1088,7 +1089,7 @@ if __name__ == "__main__":
 
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
-    
+    '''
     #########################################
     # Plot hard and soft loops
     ldpcparams = LDPCParams('802.16', '5/6', None)
@@ -1096,4 +1097,5 @@ if __name__ == "__main__":
     soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_3.csv', png_filename='EbN0VsBER_soft_hard_100_3.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
     
     print("Wall clock time elapsed: ", time.time()-t0)
+    '''
     

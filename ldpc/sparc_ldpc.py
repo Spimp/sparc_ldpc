@@ -929,7 +929,7 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
         ber_sparc = np.zeros(MIN_ERRORS)
         for j in range(MIN_ERRORS):
             (ber_sparc[j],_,_,_) = amp_ldpc_sim(sparcparams1)
-        BER_sparc[i] = np.sum(ber_sparc)
+        BER_sparc[i] = np.sum(ber_sparc)/MIN_ERRORS
 
         if soft:
             # cumulative BER for amp and ldpc
@@ -1023,8 +1023,59 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
+    '''
+    #######################################
+    # Plot plain SPARCs with different overall rates for a high number of repeats
 
+    repeats = 1
+    datapoints=15
+    SIGMA = linspace(0.8, 0.4, datapoints)
+    i=0
+    ber_sparc1 = np.zeros(datapoints)
+    ber_sparc2 = np.zeros(datapoints)
+    ber_sparc3 = np.zeros(datapoints)
+    for sigma in SIGMA:
+        sparcparams1 = SPARCParams(L=768, M=512, sigma=sigma, p=1.8, r=5/6, t=64)
+        sparcparams2 = SPARCParams(L=768, M=512, sigma=sigma, p=1.8, r=0.877, t=64)
+        sparcparams3 = SPARCParams(L=768, M=512, sigma=sigma, p=1.8, r=0.75, t=64)
+
+        ber_sparc1_cum = 0
+        ber_sparc2_cum = 0
+        ber_sparc3_cum = 0
+        
+
+
+        for j in range(repeats):
+            (ber_thisblock1, _, _, _) = amp_ldpc_sim(sparcparams1)
+            (ber_thisblock2, _, _, _) = amp_ldpc_sim(sparcparams1)
+            (ber_thisblock3, _, _, _) = amp_ldpc_sim(sparcparams1)
+
+            ber_sparc1_cum += ber_thisblock1
+            ber_sparc2_cum += ber_thisblock2
+            ber_sparc3_cum += ber_thisblock3
+
+        ber_sparc1[i] = ber_sparc1_cum/repeats
+        ber_sparc2[i] = ber_sparc2_cum/repeats
+        ber_sparc3[i] = ber_sparc3_cum/repeats
+
+    p=1.8
+    snr = (p/SIGMA**2)
+    snr_dB = 20*log10(snr)
+
+
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    ax.plot(snr_dB, ber_sparc1, 'b-', label = 'SPARC rate 5/6')
+    ax.plot(snr_dB, ber_sparc2, 'g-', label = 'SPARC rate 0.877')
+    ax.plot(snr_dB, ber_sparc3, 'k-', label = 'SPARC rate 0.75')
+    plt.xlabel('SNR (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
+    plt.ylabel('BER', fontsize=15)
+    plt.tight_layout()
+    plt.legend(loc=1, prop={'size': 8})
+    plt.savefig('Plain_sparc_diff_rates.png')
+    '''
     
+    '''
     ##########################################
     # Plot waterfall curves
     # Compare ldpc with bpsk of rate 5/6 to a sparc with sparc rate 1 and ldpc rate 5/6 with all sections covered
@@ -1036,13 +1087,13 @@ if __name__ == "__main__":
     waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_3.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_3.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
-    
     '''
+    
     #########################################
     # Plot hard and soft loops
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_2.csv', png_filename='EbN0VsBER_soft_hard_100_2.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
+    soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_3.csv', png_filename='EbN0VsBER_soft_hard_100_3.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
     
     print("Wall clock time elapsed: ", time.time()-t0)
-    '''
+    

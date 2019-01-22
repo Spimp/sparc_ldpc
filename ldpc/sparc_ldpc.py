@@ -172,12 +172,11 @@ def amp(y, σ_n, Pl, L, M, T, Ab, Az, β=np.array([None])):
         last_τ = 0
     else:
         β = β.reshape(L*M,1)
-        #z=y <- doing this causes the ber to get bigger after 2nd round of amp
         z = y - Ab(β)
         # just to ensure the if statement isn't true on the first loop
         last_τ = 0
     # delete this line! Just for testing purposes
-    T = 10
+    #T = 10
     
     for t in range(T):
         τ = np.sqrt(np.sum(z**2)/n)
@@ -1023,7 +1022,7 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
-    
+    '''
     #######################################
     # Plot plain SPARCs with different overall rates for a high number of repeats
 
@@ -1085,10 +1084,10 @@ if __name__ == "__main__":
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_3.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_3.png')
+    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=100, MAX_BLOCKS=100, csv_filename='EbN0_dBVsBER_waterfall_rep100_4.csv', png_filename='EbN0_dBVsBER_waterfall_rep100_4.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
-    '''
+    
     '''
     #########################################
     # Plot hard and soft loops

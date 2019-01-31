@@ -232,8 +232,8 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=256
-	M=64
+	L=768
+	M=512
 	logm = np.log2(M)
 	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=64)
 
@@ -252,12 +252,12 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 20
-	datapoints = 5
+	repeats = 30
+	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
 	for k in range(repeats):
-		snr_dB = np.linspace(6, 10, datapoints)
+		snr_dB = np.linspace(6, 9, datapoints)
 		# accumulative values of I_e for each snr value
 		I_e_accum = np.zeros((datapoints,10))
 		j=0
@@ -270,7 +270,7 @@ if __name__ == "__main__":
 				#print(X)
 
 				# generate the histograms for E and some statistics about them
-				E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L256_M64_r0_877_p1_8_10reps.csv')
+				E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_30reps.csv')
 
 				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False)
 	
@@ -287,12 +287,12 @@ if __name__ == "__main__":
 	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR_{dB}$='+str(snr_dB[1]))
 	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR_{dB}$='+str(snr_dB[2]))
 	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR_{dB}$='+str(snr_dB[3]))
-	ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR_{dB}$='+str(snr_dB[4]))
+	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR_{dB}$='+str(snr_dB[4]))
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L256_M64_20reps.png')	
+	plt.savefig('amp_exitchart_L768_M512_30reps.png')	
 	
 	

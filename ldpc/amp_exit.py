@@ -212,6 +212,9 @@ def calc_I_e(PE_pos, PE_neg, bin_width):
 # and of X and the corresponding I_a and snr_dB
 # return a dictionary of these object, each indexed by str(I_a)+' '+str(SNR_dB) 
 def import_E_fromfile(fileName, datapoints, repeats, Llogm):
+	# allows you pick out numbers from strings. 
+	numeric_const_pattern = '[-+]? (?: (?: \d* \. \d+ ) | (?: \d+ \.? ) )(?: [Ee] [+-]? \d+ ) ?'
+	rx = re.compile(numeric_const_pattern, re.VERBOSE)
 	imported_E_dict = {}
 	with open(fileName) as myfile:		
 		for j in range(10):
@@ -222,11 +225,13 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 			i=0
 			for i in range(repeats):
 				reader = csv.DictReader(myfile)
-				E[i,:] = row['E']
-				X[i,:] = row['X']
-				I_a[i] = row['I_a']
-				SNR_dB[i] = row['snr_dB']
-			imported_E_dict[str(I_a[0])+' '+str(SNR_dB[0])] = imported_E(X=X, E=E, I_a=I_a[0], SNR_dB=SNR_dB[0])
+				for row in reader:	# this should only actually loop through one row before it gets stuck?
+					E[i,:] = rx.findall(row['E'])
+					X[i,:] = rx.findall(row['X'])
+					I_a[i] = row['I_a']
+					SNR_dB[i] = row['snr_dB']
+					break
+			imported_E_dict[str(np.round(I_a[0],1))+' '+str(np.round(SNR_dB[0]))] = imported_E(X=X, E=E, I_a=I_a[0], SNR_dB=SNR_dB[0])
 	return imported_E_dict
 
 
@@ -236,7 +241,7 @@ if __name__ == "__main__":
 	M=512
 	logm = np.log2(M)
 	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=64)
-
+	export = True
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
@@ -252,10 +257,13 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 30
+	repeats = 10
 	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
+	if export==False:	# if not exporting, want to import E into a dictionary
+		imported_E_dict	= import_E_fromfile(fileName = 'E_data_L768_M512_r0_877_p1_8.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
+
 	for k in range(repeats):
 		snr_dB = np.linspace(6, 9, datapoints)
 		# accumulative values of I_e for each snr value
@@ -265,14 +273,19 @@ if __name__ == "__main__":
 			I_e = np.zeros(10)
 			i=0
 			for I_a in I_a_range:
-				# randomly generate bits
-				X = gen_bits(int(L*logm))
-				#print(X)
+				if export==True: # if export if false, we already have these values.
+					# randomly generate bits
+					X = gen_bits(int(L*logm))
+					#print(X)
 
-				# generate the histograms for E and some statistics about them
-				E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_30reps.csv')
+					# generate the histograms for E and some statistics about them
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
+				'''else:
+					a = imported_E_dict[str(np.round(I_a,1))+' '+str(np.round(s_dB))]
+					X = a.X[k,:]
+					E = a.E[k,:]'''
 
-				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False)
+				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=250, max_bin=40, min_bin=-40, plot=False)
 	
 				# calculate I_e
 				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
@@ -293,6 +306,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L768_M512_30reps.png')	
+	plt.savefig('amp_exitchart_L768_M512_10reps_250bins.png')	
 	
 	

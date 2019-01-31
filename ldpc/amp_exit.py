@@ -9,6 +9,12 @@ import csv
 from bitarray import bitarray
 from sparc_ldpc import * 
 
+class imported_E:
+	def __init__(self, X, E, I_a, SNR_dB):
+		self.X = X
+		self.E = E
+		self.I_a = I_a 
+		self.SNR_dB = SNR_dB
 
 # J and J_inverse based on approximation in the appendix of Design of LDPC Codes for modulation and detection.
 def J_inverse(I):
@@ -201,16 +207,36 @@ def calc_I_e(PE_pos, PE_neg, bin_width):
 	#print(I_e)
 	return I_e
 
-# import E and the corresponding X, I_a, and snr_dB from file. 
-#def import_E_fromfile():
+# import E and the corresponding X, I_a, and snr_dB from file.
+# store them in a new class which has a matrix of the repeats of E
+# and of X and the corresponding I_a and snr_dB
+# return a dictionary of these object, each indexed by str(I_a)+' '+str(SNR_dB) 
+def import_E_fromfile(fileName, datapoints, repeats, Llogm):
+	imported_E_dict = {}
+	with open(fileName) as myfile:		
+		for j in range(10):
+			E = np.zeros((repeats, Llogm))
+			X = np.zeros((repeats, Llogm))
+			SNR_dB = np.zeros(repeats)
+			I_a = np.zeros(repeats)
+			i=0
+			for i in range(repeats)
+				reader = csv.DictReader(myfile)
+				E[i,:] = row['E']
+				X[i,:] = row['X']
+				I_a[i] = row['I_a']
+				SNR_dB[i] = row['snr_dB']
+			imported_E_dict[str(I_a[0])+' '+str(SNR_dB[0])] = imported_E(X=X, E=E, I_a=I_a[0], SNR_dB=SNR_dB[0])
+	return imported_E_dict
 
 
 if __name__ == "__main__":
+	# NOTE have set T=10!!!!
 	t0=time.time()
 	L=768
 	M=512
 	logm = np.log2(M)
-	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=64)
+	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=10)
 
 	'''
 	# just plotting one set of histograms
@@ -245,7 +271,8 @@ if __name__ == "__main__":
 				#print(X)
 
 				# generate the histograms for E and some statistics about them
-				E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8.csv')
+				E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_t10.csv')
+
 				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False)
 	
 				# calculate I_e
@@ -267,6 +294,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L768_M512_10reps.png')	
+	plt.savefig('amp_exitchart_L768_M512_10reps_t10.png')	
 	
 	

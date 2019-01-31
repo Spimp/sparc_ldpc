@@ -220,7 +220,7 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 			SNR_dB = np.zeros(repeats)
 			I_a = np.zeros(repeats)
 			i=0
-			for i in range(repeats)
+			for i in range(repeats):
 				reader = csv.DictReader(myfile)
 				E[i,:] = row['E']
 				X[i,:] = row['X']

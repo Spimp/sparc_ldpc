@@ -238,8 +238,8 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=256
-	M=64
+	L=512
+	M=512
 	logm = np.log2(M)
 	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=64)
 	export = True
@@ -258,7 +258,7 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 40
+	repeats = 10
 	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L256_M64_r0_877_p1_8_40reps_500bins.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r0_877_p1_8_10reps_500bins_1.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
 				else:
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(int(k))]
@@ -308,6 +308,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L256_M64_40reps_500bins.png')	
+	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_1.png')	
 	#plt.show()
 	

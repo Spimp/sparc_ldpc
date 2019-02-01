@@ -280,7 +280,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r0_877_p1_8_10reps_500bins_1.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r0_877_p1_8_10reps_500bins_2.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
 				else:
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(int(k))]
@@ -308,6 +308,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_1.png')	
+	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_2.png')	
 	#plt.show()
 	

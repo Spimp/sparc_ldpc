@@ -248,7 +248,7 @@ if __name__ == "__main__":
 	X = gen_bits(int(L*logm))
 	print(X)
 	snr_dB = 6.0
-	I_a = 0.1
+	I_a = 0.9
 
 	E = calc_E(X, I_a, snr_dB, sparcparams)
 	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=True)
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_40reps_500bins.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L256_M64_r0_877_p1_8_40reps_500bins.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
 				else:
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(int(k))]
@@ -308,6 +308,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L768_M512_40reps_500bins.png')	
+	plt.savefig('amp_exitchart_L256_M64_40reps_500bins.png')	
 	#plt.show()
 	

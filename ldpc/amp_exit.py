@@ -135,7 +135,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	# set -inf and +inf to real numbers with v large magnitude
 	np.nan_to_num(E)
 	#print("E: ", E)
-
+	np.set_printoptions(threshold=np.nan)
 	if csv_filename!=None:
 		myFile = open(csv_filename, 'a')
 		with myFile:
@@ -164,6 +164,7 @@ def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False):
 	bin_width = (max_bin-min_bin)/(bin_number-1)
 	# set the bin edges so that both PEs are over the same range and have the same width bins. 
 	bin_edges = np.linspace(min_bin, max_bin, bin_number)
+
 	PE_pos, bin_edges_pos = np.histogram(E[index_pos1], bins=bin_edges, density=True)
 
 	PE_neg, bin_edges_neg = np.histogram(E[index_neg1], bins=bin_edges, density=True)
@@ -180,11 +181,11 @@ def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False):
 		# Plot histogram of P(E(X_i)|X_i=+1).
 		plt.figure(1)
 		plt.hist(E[index_pos1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$. $\mu_a=$"+str(mu_a)+" $SNR_{dB}=$"+str(snr_dB))
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR_{dB}=$"+str(snr_dB))
 
 		plt.figure(2)
 		plt.hist(E[index_neg1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$. $\mu_a=$"+str(mu_a)+" $SNR_{dB}=$"+str(snr_dB))
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR_{dB}=$"+str(snr_dB))
 		plt.show()
 
 	return PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width
@@ -216,29 +217,29 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 	numeric_const_pattern = '[-+]? (?: (?: \d* \. \d+ ) | (?: \d+ \.? ) )(?: [Ee] [+-]? \d+ ) ?'
 	rx = re.compile(numeric_const_pattern, re.VERBOSE)
 	imported_E_dict = {}
-	with open(fileName) as myfile:		
-		for j in range(10):
-			E = np.zeros((repeats, Llogm))
-			X = np.zeros((repeats, Llogm))
-			SNR_dB = np.zeros(repeats)
-			I_a = np.zeros(repeats)
-			i=0
-			for i in range(repeats):
+	with open(fileName) as myfile:
+		for i in range(repeats):
+			for j in range(10):
+				E = np.zeros(Llogm)
+				X = np.zeros(Llogm)
+				SNR_dB = 0
+				I_a = 0
 				reader = csv.DictReader(myfile)
 				for row in reader:	# this should only actually loop through one row before it gets stuck?
-					E[i,:] = rx.findall(row['E'])
-					X[i,:] = rx.findall(row['X'])
-					I_a[i] = row['I_a']
-					SNR_dB[i] = row['snr_dB']
+					E = np.float_(rx.findall(row['E']))
+					X = np.int_(rx.findall(row['X']))
+					I_a = float(row['I_a'])
+					SNR_dB = float(row['snr_dB'])
 					break
-			imported_E_dict[str(np.round(I_a[0],1))+' '+str(np.round(SNR_dB[0]))] = imported_E(X=X, E=E, I_a=I_a[0], SNR_dB=SNR_dB[0])
+				imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i))] = imported_E(X=X, E=E, I_a=I_a, SNR_dB=SNR_dB)
+				#print(str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i)))
 	return imported_E_dict
 
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=768
-	M=512
+	L=256
+	M=64
 	logm = np.log2(M)
 	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=64)
 	export = True
@@ -246,8 +247,8 @@ if __name__ == "__main__":
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
 	print(X)
-	snr_dB = 8.0
-	I_a = 0.4
+	snr_dB = 6.0
+	I_a = 0.1
 
 	E = calc_E(X, I_a, snr_dB, sparcparams)
 	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=True)
@@ -257,17 +258,17 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 10
+	repeats = 40
 	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
 	if export==False:	# if not exporting, want to import E into a dictionary
-		imported_E_dict	= import_E_fromfile(fileName = 'E_data_L768_M512_r0_877_p1_8.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
+		imported_E_dict	= import_E_fromfile(fileName = 'E_data_test.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
 
+	# accumulative values of I_e for each snr value
+	I_e_accum = np.zeros((datapoints,10))
 	for k in range(repeats):
 		snr_dB = np.linspace(6, 9, datapoints)
-		# accumulative values of I_e for each snr value
-		I_e_accum = np.zeros((datapoints,10))
 		j=0
 		for s_dB in snr_dB:
 			I_e = np.zeros(10)
@@ -279,13 +280,14 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
-				'''else:
-					a = imported_E_dict[str(np.round(I_a,1))+' '+str(np.round(s_dB))]
-					X = a.X[k,:]
-					E = a.E[k,:]'''
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r0_877_p1_8_40reps_500bins.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
+				else:
+					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
+					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(int(k))]
+					X = a.X
+					E = a.E
 
-				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=250, max_bin=40, min_bin=-40, plot=False)
+				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False)
 	
 				# calculate I_e
 				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
@@ -306,6 +308,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L768_M512_10reps_250bins.png')	
-	
+	plt.savefig('amp_exitchart_L768_M512_40reps_500bins.png')	
+	#plt.show()
 	

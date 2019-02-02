@@ -1022,6 +1022,7 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
+
     '''
     #######################################
     # Plot plain SPARCs with different overall rates for a high number of repeats
@@ -1076,6 +1077,7 @@ if __name__ == "__main__":
     
     
     '''
+    '''
     ##########################################
     # Plot waterfall curves
     # Compare ldpc with bpsk of rate 5/6 to a sparc with sparc rate 1 and ldpc rate 5/6 with all sections covered
@@ -1087,14 +1089,14 @@ if __name__ == "__main__":
     waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=200, MAX_BLOCKS=200, csv_filename='EbN0_dBVsBER_waterfall_rep200_5.csv', png_filename='EbN0_dBVsBER_waterfall_rep200_5.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
-    
     '''
+    
     #########################################
     # Plot hard and soft loops
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_3.csv', png_filename='EbN0VsBER_soft_hard_100_3.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
+    soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_4.csv', png_filename='EbN0VsBER_soft_hard_100_4.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
     
     print("Wall clock time elapsed: ", time.time()-t0)
-    '''
+    
     

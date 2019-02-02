@@ -15,6 +15,8 @@ class imported_E:
 		self.E = E
 		self.I_a = I_a 
 		self.SNR_dB = SNR_dB
+	def __eq__(self, other): 
+		return (self.X==other.X).all() and (self.E==other.E).all() and self.I_a==other.I_a and self.SNR_dB==other.SNR_dB
 
 # J and J_inverse based on approximation in the appendix of Design of LDPC Codes for modulation and detection.
 def J_inverse(I):
@@ -219,30 +221,41 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 	imported_E_dict = {}
 	with open(fileName) as myfile:
 		for i in range(repeats):
-			for j in range(10):
-				E = np.zeros(Llogm)
-				X = np.zeros(Llogm)
-				SNR_dB = 0
-				I_a = 0
-				reader = csv.DictReader(myfile)
-				for row in reader:	# this should only actually loop through one row before it gets stuck?
-					E = np.float_(rx.findall(row['E']))
-					X = np.int_(rx.findall(row['X']))
-					I_a = float(row['I_a'])
-					SNR_dB = float(row['snr_dB'])
-					break
-				imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i))] = imported_E(X=X, E=E, I_a=I_a, SNR_dB=SNR_dB)
-				#print(str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i)))
+			for k in range(10):
+				for j in range(datapoints):
+					E = np.zeros(Llogm)
+					X = np.zeros(Llogm)
+					SNR_dB = 0
+					I_a = 0
+					reader = csv.DictReader(myfile)
+					for row in reader:	# this should only actually loop through one row before it gets stuck?
+						E = np.float_(rx.findall(row['E']))
+						X = np.int_(rx.findall(row['X']))
+						I_a = float(row['I_a'])
+						SNR_dB = float(row['snr_dB'])
+						break
+					# this ensures that each time a result is repeated, it is stored under a new key.
+					# Results don't always appear to be output in order so you can't always just use i for this. 
+					for l in range(repeats):
+						if str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(l)) in imported_E_dict:
+							if imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(l))] == imported_E(X=X, E=E, I_a=I_a, SNR_dB=SNR_dB):
+								print("repeat dict")
+								break
+							else:
+								continue
+						else:
+							imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(l))] = imported_E(X=X, E=E, I_a=I_a, SNR_dB=SNR_dB)
+							break
+					#print(str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i)))
 	return imported_E_dict
 
 
 if __name__ == "__main__":
-	# NOTE THAT t=10 in the code below!!
 	t0=time.time()
 	L=512
 	M=512
 	logm = np.log2(M)
-	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=0.877, t=10)
+	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=5/6, t=64)
 	export = True
 	'''
 	# just plotting one set of histograms
@@ -264,31 +277,37 @@ if __name__ == "__main__":
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
 	if export==False:	# if not exporting, want to import E into a dictionary
-		imported_E_dict	= import_E_fromfile(fileName = 'E_data_test.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
-
+		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
+		imported_E_dict	= import_E_fromfile(fileName = 'E_data_L512_M512_r0_877_p1_8_20reps_500bins_2and3.csv', datapoints = datapoints, repeats = repeats+1, Llogm = int(L*logm))
+		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
+	snr_dB = np.linspace(6, 9, datapoints)
 	for k in range(repeats):
-		snr_dB = np.linspace(6, 9, datapoints)
 		j=0
 		for s_dB in snr_dB:
 			I_e = np.zeros(10)
 			i=0
 			for I_a in I_a_range:
+				a = None
 				if export==True: # if export if false, we already have these values.
 					# randomly generate bits
 					X = gen_bits(int(L*logm))
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r0_877_p1_8_10reps_500bins_t10.csv')#'E_data_L768_M512_r0_877_p1_8_10reps_250bins.csv')
-				else:
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r5_6_p1_8_10reps_500bins.csv')
+				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
-					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(int(k))]
-					X = a.X
-					E = a.E
+					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
 
-				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False)
+					X = a.X
+					assert(len(X)==int(L*logm))
+					E = a.E
+					assert(len(E)==int(L*logm))
+				#print('X[0] is: ', X[0])
+				#print("E[0] is: ", E[0])
+				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=1000, max_bin=40, min_bin=-40, plot=False)
 	
 				# calculate I_e
 				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
@@ -309,6 +328,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_t10.png')	
+	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_r_5_6.png')	
 	#plt.show()
 	

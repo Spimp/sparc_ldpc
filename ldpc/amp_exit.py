@@ -255,7 +255,7 @@ if __name__ == "__main__":
 	L=512
 	M=512
 	logm = np.log2(M)
-	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=5/6, t=64)
+	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=1, t=64)
 	export = True
 	'''
 	# just plotting one set of histograms
@@ -296,7 +296,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L768_M512_r5_6_p1_8_10reps_500bins.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r1_p1_8_10reps_500bins.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -328,6 +328,6 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_r_5_6.png')	
+	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_r_1.png')	
 	#plt.show()
 	

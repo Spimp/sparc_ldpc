@@ -46,9 +46,14 @@ def gen_bits(length):
 # sigma_w is the variance of the noise
 # P is the power that will be uniformly allocated
 # returns: y, Ab, Az, and Pl
-def prep_y(X, L, M, n, sigma_w, P):
+def prep_y(X, L, M, n, sigma_w, P, a=None, f=None, C=None):
 	# Calculate the power allocation
-	Pl = P/L * np.ones(L)
+	if a==None:
+		# uniform power allocation
+		Pl = P/L * np.ones(L)
+	else:
+		# parameterised power allocation (fn from sprac_ldpc.py)
+		Pl = pa_parameterised(L, C, P, a, f)
 	# Need to convert X, which contains -1 and +1s to bits
 	X = (X-1)*-1/2
     # convert the bits to indices for encoding
@@ -64,6 +69,7 @@ def prep_y(X, L, M, n, sigma_w, P):
 	for l in range(L):
 	    β_0[l*M + X_indices[l]] = np.sqrt(n * Pl[l])
 	x = Ab(β_0)
+	#print("If this close to zero, power allocation is correct: ", (sum(x**2)/n)-P)
 
 	# Generate random channel noise and then received signal y
 	w = np.random.randn(n, 1) * sigma_w
@@ -100,6 +106,10 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	P=sparcparams.p
 	r_sparc = sparcparams.r
 	T = sparcparams.t
+	a = sparcparams.a
+	f = sparcparams.f
+	C = sparcparams.C
+
 	n = int(L*np.log2(M) / r_sparc)
 	snr = 10**(snr_dB/20)
 	sigma_w = np.sqrt(P/snr)
@@ -124,11 +134,11 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	# perform amp decoding on these beta_0
 	sigma=None # this value isn't actually used in the function so doesn't matter
 	# Generate y, Ab, and Az to pass into amp()
-	y, Ab, Az, Pl = prep_y(X, L, M, n, sigma_w, P)
-	beta_T = amp(y, sigma, Pl, L, M, T, Ab, Az, beta_0*np.sqrt(n*P/L)).reshape(-1)
+	y, Ab, Az, Pl = prep_y(X, L, M, n, sigma_w, P, a, f, C)
+	beta_T = amp(y, sigma, Pl, L, M, T, Ab, Az, beta_0*np.sqrt(n*np.repeat(Pl,M))).reshape(-1)
 
 	# convert sectionwise posterior probabilities to bitwise posterior probabilities
-	sectionwise = beta_T/np.sqrt(n*P/L)
+	sectionwise = beta_T/np.sqrt(n*np.repeat(Pl,M))
 	bitwise_e = sp2bp(sectionwise, L, M)
 	# clip the bitwise_e to avoid a divide by zero error in the log
 	#np.clip(bitwise_e, 0.00000000000000000000000001, 1-0.00000000000000000000000001, out=bitwise_e)
@@ -272,8 +282,8 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 10
-	datapoints = 4
+	repeats = 20
+	datapoints = 5
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 1.8
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -282,7 +292,7 @@ if __name__ == "__main__":
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(6, 9, datapoints)
+	snr_dB = np.linspace(7, 11, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
@@ -296,7 +306,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_r1_p1_8_10reps_500bins.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data__L512_M512_20reps_500bins_r_1.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -322,12 +332,11 @@ if __name__ == "__main__":
 	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR_{dB}$='+str(snr_dB[1]))
 	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR_{dB}$='+str(snr_dB[2]))
 	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR_{dB}$='+str(snr_dB[3]))
-	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR_{dB}$='+str(snr_dB[4]))
+	ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR_{dB}$='+str(snr_dB[4]))
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_10reps_500bins_r_1.png')	
+	plt.savefig('amp_exitchart_L512_M512_20reps_500bins_r_1.png')	
 	#plt.show()
-	

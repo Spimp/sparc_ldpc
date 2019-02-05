@@ -162,6 +162,19 @@ def sparc_transforms_shorter(L, M, n, ordering):
         return Ay(z).reshape(-1, 1) / np.sqrt(n)
     return Ab, Az
 
+# Power allocation
+# Just going to include parameterised power allocation (but note there are two other options.)
+# This results in an exponential pa with parameterised steepnees which is
+# flattened after some point. 
+# We generate a power allocation parameterised by a and  f which set 
+# the steepness and the flattening point respectively.
+# exponential pa up to fL and then flat. The power is scaled to sum to P
+def pa_parameterised(L, C, P, a, f):
+    pa = 2**(-2 * a * C * np.arange(L) / L)
+    pa[int(f*L):] = pa[int(f*L)]
+    pa /= pa.sum() / P
+    return pa
+
 # the amp algorithm
 def amp(y, σ_n, Pl, L, M, T, Ab, Az, β=np.array([None])):
     P = np.sum(Pl)
@@ -209,14 +222,17 @@ def amp(y, σ_n, Pl, L, M, T, Ab, Az, β=np.array([None])):
 # r is the user data rate, r_pa the power allocation design rate
 # t is the maximum number of AMP iterations permitted
 class SPARCParams:
-	def __init__(self, L, M, sigma, p, r, t):
+	def __init__(self, L, M, sigma, p, r, t, a=None, f=None, C=None):
 		self.L = L
 		self.M = M
 		self.sigma = sigma
 		self.p = p
 		self.r = r
-		#self.r_pa = r_pa
 		self.t = t
+		self.a = a
+		self.f = f
+		self.C = C
+
 
 # LDPC Params needed to set up one of Jossy's code
 class LDPCParams:
@@ -329,7 +345,8 @@ def bits2indices(bits, m: "m must be a power of 2"):
     return indices
 
 # note removed r_pa from function as never use it
-def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
+# a, f, and C control the parameterised power allocation
+def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None, a=None, f=None, C=None):
     #Get the SPARC parameters from the struct
     L = sparcparams.L
     M = sparcparams.M
@@ -338,6 +355,9 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     r_sparc = sparcparams.r
     #r_pa_sparc = sparcparams.r_pa
     T = sparcparams.t
+    a = sparcparams.a
+    f = sparcparams.f
+    C = sparcparams.C
 
     # calculate some additional parameters 
     # Compute the SNR, capacity, and n, from the input parameters
@@ -350,8 +370,11 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     
     # Generate the power allocation
     # Pl = pa_iterative(L, L, sigma, P, R_PA)
-    # uniform power allocation across sections
-    Pl = P/L * np.ones(L)
+    if a==None: 
+        # uniform power allocation across sections
+        Pl = P/L * np.ones(L)
+    else:
+        Pl = pa_parameterised(L, C, P, a, f)
 
 
     if ldpcparams == None:
@@ -436,7 +459,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
     else:
         # Get the sectionwise posterior probabilities by dividing β by the power in each section. 
         # This converts each section in β to a valid probability distribution.
-        sectionwise_posterior = β/np.sqrt(n*P/L)
+        sectionwise_posterior = β/np.sqrt(n*np.repeat(Pl, M))
 
         ldpc_sections = int(nl/logm)
         # convert sectionwise to bitwise posterior probabilities
@@ -525,7 +548,8 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None):
 # between the amp decoder and the ldpc decoder
 # soft_iter The number of iterations of soft information exchange
 # in this function '_ldpc' means after ldpc decoding and '_amp' means after amp decoding
-def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_iter):
+# a, f, and C control the parameterised power allocation
+def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_iter, a=None, f=None, C=None):
     # arrays to store the return values of the ber
     # bit error rate after each round of amp decoding
     ber_amp = []
@@ -540,6 +564,9 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
     r_sparc = sparcparams.r
     #r_pa_sparc = sparcparams.r_pa
     T = sparcparams.t
+    a = sparcparams.a
+    f = sparcparams.f
+    C = sparcparams.C
 
     # calculate some additional parameters 
     # Compute the SNR, capacity, and n, from the input parameters
@@ -552,8 +579,12 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
     
     # Generate the power allocation
     # Pl = pa_iterative(L, L, sigma, P, R_PA)
-    # uniform power allocation across sections
-    Pl = P/L * np.ones(L)
+    if a==None:
+        # uniform power allocation across sections
+        Pl = P/L * np.ones(L)
+    else:
+        # parameterised power allocation
+        Pl = pa_parameterised(L, C, P, a, f)
 
     standard = ldpcparams.standard
     r_ldpc = ldpcparams.r_ldpc
@@ -628,7 +659,7 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
     for i in range(soft_iter):
         # Get the sectionwise posterior probabilities by dividing β by the power in each section. 
         # This converts each section in β to a valid probability distribution.
-        sectionwise_posterior = beta_amp/np.sqrt(n*P/L)
+        sectionwise_posterior = beta_amp/np.sqrt(n*np.repeat(Pl, M))
 
         #print('sectionwise posterior sum ', sum(sectionwise_posterior))
 
@@ -670,7 +701,7 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
         #print("sum sectionwise_ldpc ", sum(sectionwise_ldpc))
 
         # multiply by the power allocation
-        beta_ldpc = sectionwise_ldpc * np.sqrt(n*P/L)
+        beta_ldpc = sectionwise_ldpc * np.sqrt(n*np.repeat(Pl[(L-ldpc_sections):], M))
 
         # pass this through the sparc transform to give a new channel input for this approximation of beta
         # Note Ab is just created based on size so don't need to regenerate for this new input
@@ -774,6 +805,9 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     p=sparcparams.p
     r_sparc = sparcparams.r
     T = sparcparams.t
+    a = sparcparams.a
+    f = sparcparams.f
+    C = sparcparams.C
 
     # LDPC parameters
     standard = ldpcparams.standard
@@ -812,9 +846,9 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
         # get the BER for the ldpc and bpsk modulation. The repeats are built into the code
         BER_bpsk[i] = sim_ldpc(ldpcparams, sigma, MIN_ERRORS, MAX_BLOCKS)
 
-        sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T)
+        sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T, a, f, C)
         # plain sparc with same overall rate for comparison
-        sparcparams_plain = SPARCParams(L, M, sigma, p, R, T) 
+        sparcparams_plain = SPARCParams(L, M, sigma, p, R, T, a, f, C)
         # cumulative BER for amp and ldpc
         ber_cum_amp = 0
         ber_cum_ldpc = 0
@@ -888,6 +922,9 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     p=sparcparams.p
     r_sparc = sparcparams.r
     T = sparcparams.t
+    a = sparcparams.a
+    f = sparcparams.f
+    C = sparcparams.C 
 
     # LDPC parameters
     standard = ldpcparams.standard
@@ -921,9 +958,9 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
 
     i=0
     for sigma in SIGMA:
-        sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T)
+        sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T, a, f, C)
         # sparcparams for running at same overall rate but with no outer code
-        sparcparams1 = SPARCParams(L, M, sigma, p, R, T)
+        sparcparams1 = SPARCParams(L, M, sigma, p, R, T, a, f, C)
 
         ber_sparc = np.zeros(MIN_ERRORS)
         for j in range(MIN_ERRORS):

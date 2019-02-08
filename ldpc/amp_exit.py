@@ -265,7 +265,8 @@ if __name__ == "__main__":
 	L=512
 	M=512
 	logm = np.log2(M)
-	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=1.8, r=1, t=64)
+	R_sparc = 1
+
 	export = True
 	'''
 	# just plotting one set of histograms
@@ -285,17 +286,21 @@ if __name__ == "__main__":
 	repeats = 20
 	datapoints = 5
 	I_a_range = np.linspace(0, 0.9, 10)
-	P = 1.8
+	P = 2.5
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
 		imported_E_dict	= import_E_fromfile(fileName = 'E_data_L512_M512_r0_877_p1_8_20reps_500bins_2and3.csv', datapoints = datapoints, repeats = repeats+1, Llogm = int(L*logm))
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(7, 11, datapoints)
+	snr_dB = np.linspace(10, 14, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
+			# channel capacity
+			snr = 10**(s_dB/20)
+			C = 0.5 * np.log2(1 + snr)
+			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
 			I_e = np.zeros(10)
 			i=0
 			for I_a in I_a_range:
@@ -306,7 +311,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data__L512_M512_20reps_500bins_r_1.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data__L512_M512_20reps_500bins_r1_pa1.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -338,5 +343,5 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_20reps_500bins_r_1.png')	
+	plt.savefig('amp_exitchart_L512_M512_20reps_500bins_r1_pa1.png')	
 	#plt.show()

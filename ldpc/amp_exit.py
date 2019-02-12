@@ -262,10 +262,10 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=512
-	M=512
+	L=128
+	M=4
 	logm = np.log2(M)
-	R_sparc = 1.5
+	R_sparc = 1
 
 	export = True
 	'''
@@ -282,25 +282,26 @@ if __name__ == "__main__":
 	print("positive variance: ", var_pos)
 	print("negative variance: ", var_neg)
 	'''
+	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 20
+	repeats = 100
 	datapoints = 5
 	I_a_range = np.linspace(0, 0.9, 10)
-	P = 4
+	P = 2
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
-		imported_E_dict	= import_E_fromfile(fileName = 'E_data_L512_M512_r0_877_p1_8_20reps_500bins_2and3.csv', datapoints = datapoints, repeats = repeats+1, Llogm = int(L*logm))
+		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_5pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(17, 21, datapoints)
+	snr_dB = np.linspace(10, 14, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
 			# channel capacity
 			snr = 10**(s_dB/20)
 			C = 0.5 * np.log2(1 + snr)
-			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
+			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64)#, a=R_sparc/C, C=C, f=R_sparc/C)
 			I_e = np.zeros(10)
 			i=0
 			for I_a in I_a_range:
@@ -311,7 +312,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data__L512_M512_20reps_500bins_r1_5_P4_pa2.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L128_M4_100reps_500bins_r1_P2.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -319,6 +320,7 @@ if __name__ == "__main__":
 					X = a.X
 					assert(len(X)==int(L*logm))
 					E = a.E
+					if(len(E)!=int(L*logm)): print("i: ", i, "I_A:", I_a)
 					assert(len(E)==int(L*logm))
 				#print('X[0] is: ', X[0])
 				#print("E[0] is: ", E[0])
@@ -333,15 +335,64 @@ if __name__ == "__main__":
 	print("Wall clock time elapsed: ", time.time()-t0)
 
 	fig, ax = plt.subplots()
-	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR_{dB}$='+str(snr_dB[0]))	
-	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR_{dB}$='+str(snr_dB[1]))
-	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR_{dB}$='+str(snr_dB[2]))
-	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR_{dB}$='+str(snr_dB[3]))
-	ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR_{dB}$='+str(snr_dB[4]))
+	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
+	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
-	plt.savefig('amp_exitchart_L512_M512_20reps_500bins_r1_5_P4_pa2.png')	
+	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
+	plt.savefig('amp_exitchart_L4_M128_100reps_500bins_r1_P2.png')	
 	#plt.show()
+	'''
+	#############################
+	I_a = 0.9
+	repeats = 20
+	beta_plot = np.array([])
+	for i in range(repeats):
+		# Histograms of the section-wise probabilities produced by a particular I_a
+		X = gen_bits(int(L*logm))
+		# convert to LLRs and then to sectionwise probabilities
+		#calculate sigma_a and mu_a
+		sigma_a = J_inverse(I_a)
+		mu_a = (sigma_a**2)/2
+		#print("mu_a: ", mu_a)
+		# N_a is gaussian noise with zero mean and variance sigma_a**2. We want an array of samples from this the same size as X. 
+		N_a = np.random.randn(len(X))*sigma_a
+		#print("N_a: ", N_a)
+		# the simulated L-values coming out of the LDPC decoder
+		A = mu_a*X + N_a 
+		# convert LLRs in A to bitwise posterior probabilities
+		bitwise_a = 1/(1+np.exp(A))
+		# convert this to sectionwise posterior probabilities
+		beta_0 = bp2sp(bitwise_a, L, M)
+
+		# find the correct beta which corresponds to these X
+		# Need to convert X, which contains -1 and +1s to bits
+		X = (X-1)*-1/2
+	    # convert the bits to indices for encoding
+		X_indices = bits2indices(X, M)
+		assert len(X_indices)==L
+		# Find the correct beta corresponding to X
+		β = np.zeros((L*M, 1))
+		for l in range(L):
+		    β[l*M + X_indices[l]] = 1#np.sqrt(n * Pl[l])
+		# record the indices of the correct non-zero entries. 
+		indices_correct = np.nonzero(β)[0]
+		
+		# get the sectionwise probabilities assigned to the correct non-zero entries for each of the L sections
+		beta_plot = np.append(beta_plot, beta_0[indices_correct])
+
+	print(shape(beta_plot))
+	#print(beta_plot)
+	bin_edges = np.linspace(0, 1, 100)
+	plt.figure(1)
+	plt.hist(beta_plot, bins=bin_edges, density = False)
+	plt.title("Histogram of the section-wise probabilities for the correct non-zero entry in beta")
+	plt.show()
+	#
+	'''

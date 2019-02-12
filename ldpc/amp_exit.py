@@ -263,11 +263,12 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 if __name__ == "__main__":
 	t0=time.time()
 	L=128
-	M=2
+	M=4
 	logm = np.log2(M)
 	R_sparc = 1
 
 	export = True
+
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
@@ -287,7 +288,7 @@ if __name__ == "__main__":
 	repeats = 100
 	datapoints = 5
 	I_a_range = np.linspace(0, 0.9, 10)
-	P = 2
+	P = 1.8
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
 		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_5pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
@@ -312,7 +313,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L128_M2_100reps_500bins_r1_P2.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L128_M4_100reps_500bins_r1_P1_8.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -346,11 +347,12 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exitchart_L2_M128_100reps_500bins_r1_P2.png')	
+	plt.savefig('amp_exitchart_L128_M4_100reps_500bins_r1_P1_8.png')	
 	#plt.show()
 	'''
+	
 	#############################
-	I_a = 0.9
+	I_a = 0.5
 	repeats = 20
 	beta_plot = np.array([])
 	for i in range(repeats):
@@ -369,7 +371,7 @@ if __name__ == "__main__":
 		# convert LLRs in A to bitwise posterior probabilities
 		bitwise_a = 1/(1+np.exp(A))
 		# convert this to sectionwise posterior probabilities
-		beta_0 = bp2sp(bitwise_a, L, M)
+		beta_0 = bp2sp2(bitwise_a, L, M)
 
 		# find the correct beta which corresponds to these X
 		# Need to convert X, which contains -1 and +1s to bits
@@ -394,5 +396,6 @@ if __name__ == "__main__":
 	plt.hist(beta_plot, bins=bin_edges, density = False)
 	plt.title("Histogram of the section-wise probabilities for the correct non-zero entry in beta")
 	plt.show()
-	#
 	'''
+	
+	

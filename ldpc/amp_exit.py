@@ -118,6 +118,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	PE_neg = 0
 	bin_edges_pos = 0
 	bin_edges_neg = 0
+	
 	#calculate sigma_a and mu_a
 	sigma_a = J_inverse(I_a)
 	mu_a = (sigma_a**2)/2
@@ -145,7 +146,10 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	# convert bitwise post. to LLRs 
 	E = np.log(1-bitwise_e)-np.log(bitwise_e)
 	# set -inf and +inf to real numbers with v large magnitude
-	np.nan_to_num(E)
+	E=np.nan_to_num(E)
+	###########################
+	#Note testing out line below. 
+	np.clip(E, -55, 55, out=E)
 	#print("E: ", E)
 	np.set_printoptions(threshold=np.nan)
 	if csv_filename!=None:
@@ -163,7 +167,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 # bin_number, max_bin, min_bin determine the number of histogram bins and the range of the bins
 # plot is a bool. Set true to plot histograms
 # Return: histograms of E, and their means and variances. 
-def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False):
+def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False, snr_dB='Not given'):
 	assert(len(E)==len(X))
 
 	# find the indices of all the occurences of a 1 in X
@@ -193,11 +197,11 @@ def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False):
 		# Plot histogram of P(E(X_i)|X_i=+1).
 		plt.figure(1)
 		plt.hist(E[index_pos1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR_{dB}=$"+str(snr_dB))
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR=$"+str(snr_dB)+"dB")
 
 		plt.figure(2)
 		plt.hist(E[index_neg1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR_{dB}=$"+str(snr_dB))
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR=$"+str(snr_dB)+"dB")
 		plt.show()
 
 	return PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width
@@ -262,47 +266,59 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=128
-	M=4
+	L=512
+	M=512
 	logm = np.log2(M)
 	R_sparc = 1
 
 	export = True
-
 	'''
+	
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
 	print(X)
-	snr_dB = 6.0
+	snr_dB = 12.0
 	I_a = 0.9
+	P=2
+	snr = 10**(snr_dB/20)
+	C = 0.5 * np.log2(1 + snr)
+	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
 
 	E = calc_E(X, I_a, snr_dB, sparcparams)
-	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=True)
+	np.clip(E, -55, 55, out=E)
+
+	index_neg1 = np.where(X==-1)[0]
+	print(np.ndarray.min(E))
+	print(E[index_neg1])
+	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=500, max_bin=60, min_bin=-60, plot=True, snr_dB=snr_dB)
 	print("positive mean: ", mean_pos)
 	print("negative mean: ", mean_neg)
 	print("positive variance: ", var_pos)
 	print("negative variance: ", var_neg)
+	
 	'''
+
 	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	repeats = 100
+	bin_number = 500
+	repeats = 40
 	datapoints = 5
 	I_a_range = np.linspace(0, 0.9, 10)
-	P = 1.8
+	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
-		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_5pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
+		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(10, 14, datapoints)
+	snr_dB = np.linspace(9, 13, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
 			# channel capacity
 			snr = 10**(s_dB/20)
 			C = 0.5 * np.log2(1 + snr)
-			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64)#, a=R_sparc/C, C=C, f=R_sparc/C)
+			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
 			I_e = np.zeros(10)
 			i=0
 			for I_a in I_a_range:
@@ -313,7 +329,11 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L128_M4_100reps_500bins_r1_P1_8.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_40reps_500bins_r1_P4_pa3.csv')
+					E = np.nan_to_num(E)
+					###################
+					# testing out the line below. Also see line 152
+					np.clip(E, -55, 55, out=E)
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -321,11 +341,11 @@ if __name__ == "__main__":
 					X = a.X
 					assert(len(X)==int(L*logm))
 					E = a.E
-					if(len(E)!=int(L*logm)): print("i: ", i, "I_A:", I_a)
+					if(len(E)!=int(L*logm)): print("i: ", i, "I_A:", I_a, "j: ", j)
 					assert(len(E)==int(L*logm))
 				#print('X[0] is: ', X[0])
 				#print("E[0] is: ", E[0])
-				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=1000, max_bin=40, min_bin=-40, plot=False)
+				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=bin_number, max_bin=60, min_bin=-60)#, plot=True, snr_dB=s_dB)
 	
 				# calculate I_e
 				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
@@ -347,8 +367,9 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exitchart_L128_M4_100reps_500bins_r1_P1_8.png')	
+	plt.savefig('amp_exitchart_L512_M512_40reps_500bins_r1_P4_pa3.png')	
 	#plt.show()
+	
 	'''
 	
 	#############################

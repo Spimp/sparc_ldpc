@@ -58,6 +58,7 @@ def sub_fht(n, m, seed=0, ordering=None):
     if ordering is not None:
         assert ordering.shape == (n,)
     else:
+        # in my code this function is never called without an ordering. So it doesn't really matter what this seed is. 
         rng = np.random.RandomState(seed)
         idxs = np.arange(1, w, dtype=np.uint32)
         rng.shuffle(idxs)
@@ -108,6 +109,7 @@ def block_sub_fht(n, m, l, seed=0, ordering=None):
         assert ordering.shape == (l, n)
     else:
         w = 2**int(np.ceil(np.log2(max(m+1, n+1))))
+        # could just remove the random seed from here. 
         rng = np.random.RandomState(seed)
         ordering = np.empty((l, n), dtype=np.uint32)
         idxs = np.arange(1, w, dtype=np.uint32)
@@ -169,6 +171,7 @@ def sparc_transforms_shorter(L, M, n, ordering):
 # We generate a power allocation parameterised by a and  f which set 
 # the steepness and the flattening point respectively.
 # exponential pa up to fL and then flat. The power is scaled to sum to P
+# C is the channel capacity
 def pa_parameterised(L, C, P, a, f):
     pa = 2**(-2 * a * C * np.arange(L) / L)
     pa[int(f*L):] = pa[int(f*L)]
@@ -193,9 +196,9 @@ def amp(y, σ_n, Pl, L, M, T, Ab, Az, β=np.array([None])):
     
     for t in range(T):
         τ = np.sqrt(np.sum(z**2)/n)
-        #if τ == last_τ:
+        if τ == last_τ:
         # can change params for isclose if need be. If stopping too early.
-        if np.isclose(τ, last_τ):
+        #if np.isclose(τ, last_τ):
             #print("Stopping after t runs:", t)
             return β
         last_τ = τ
@@ -316,7 +319,6 @@ def bp2sp(v, L, M: "must be power of 2"):
             b = (1-bp)**(bits)
             sp[l*M+m] = np.prod(a * b)
         sp[l*M:(l+1)*M] = sp[l*M:(l+1)*M]/sum(sp[l*M:(l+1)*M])
-
     return sp
 
 # assumes that the left most bit (lmb) is the most significant bit (msb)
@@ -796,7 +798,7 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
     return ber
 
 # code to plot a waterfall curve for an ldpc code with a bpsk modulation scheme and sparc with an outer ldpc code
-def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
+def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
 
     # Sparc parameters
     L = sparcparams.L
@@ -831,6 +833,8 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     EbN0c_dB = 20*log10(EbN0c)
 
     SIGMA = linspace(0.8, 0.4, datapoints)
+    # BER after first round of AMP decoding
+    BER_amp_1 = np.zeros(datapoints)
     # BER after second round of AMP decoding
     BER_amp_2 = np.zeros(datapoints)
     # BER after first round of ldpc
@@ -846,11 +850,17 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
         # get the BER for the ldpc and bpsk modulation. The repeats are built into the code
         BER_bpsk[i] = sim_ldpc(ldpcparams, sigma, MIN_ERRORS, MAX_BLOCKS)
 
+        C = 0.5*np.log2(1+p/(sigma**2))
+        if pa_param==True and a==None:
+            a=r_sparc/C
+            f=r_sparc/C
+        # Note that I'm using the same power allocation for both SPARCs, but it is being tailored to the sparc with outer code. 
         sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T, a, f, C)
         # plain sparc with same overall rate for comparison
         sparcparams_plain = SPARCParams(L, M, sigma, p, R, T, a, f, C)
         # cumulative BER for amp and ldpc
-        ber_cum_amp = 0
+        ber_cum_amp1 = 0
+        ber_cum_amp2 = 0
         ber_cum_ldpc = 0
         ber_cum_ldpc2 = 0
         ber_cum_plain = 0
@@ -861,20 +871,21 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
             (ber_thisblock_plain, _, _, _) = amp_ldpc_sim(sparcparams_plain)
             #print("BER amp:", ber_thisblock_amp)
             #print("BER ldpc: ", ber_thisblock_ldpc)
-            ber_thisblock_amp = ber_thisblock_amp[1]
 
-            ber_cum_amp += ber_thisblock_amp
+            ber_cum_amp1 += ber_thisblock_amp[0]
+            ber_cum_amp2 += ber_thisblock_amp[1]
             ber_cum_ldpc += ber_thisblock_ldpc[0]
             ber_cum_ldpc2 += ber_thisblock_ldpc[1]
             ber_cum_plain += ber_thisblock_plain
-            if ber_thisblock_ldpc[0]:
+            if ber_thisblock_plain:
                 nblockerrors_ldpc += 1
             nblocks += 1
 
             if nblocks >= MAX_BLOCKS:
                 break
 
-        BER_amp_2[i] = ber_cum_amp/nblocks
+        BER_amp_1[i] = ber_cum_amp1/nblocks
+        BER_amp_2[i] = ber_cum_amp2/nblocks
         BER_ldpc[i] = ber_cum_ldpc/nblocks
         BER_ldpc_2[i] = ber_cum_ldpc2/nblocks
         BER_plain[i] = ber_cum_plain/nblocks
@@ -889,16 +900,17 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
-        myFields = ['EbN0_dB', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'BER_bpsk']
+        myFields = ['EbN0_dB', 'BER_amp_1', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'BER_bpsk']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
         for k in range(datapoints):
-            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'BER_bpsk': BER_bpsk[k]})
+            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp_1': BER_amp_1[k],'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'BER_bpsk': BER_bpsk[k]})
 
-
+    print("BER_ldpc is: ", BER_ldpc)
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
-    ax.plot(EbN0_dB, BER_ldpc, 'k:', label = 'SPARC w/ outer code: after LDPC')
+    ax.plot(EbN0_dB, BER_amp_1, 'm--.', label = 'SPARC w/ outer code: after 1st round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc, 'm-', label = 'SPARC w/ outer code: after 1st round of LDPC')
     ax.plot(EbN0_dB, BER_amp_2, 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
     ax.plot(EbN0_dB, BER_ldpc_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
@@ -1060,6 +1072,41 @@ if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
 
+    ######################################
+    # Plot the parameterised power allocation
+    datapoints = 5
+    P=2.5
+    L=512
+    R=1
+    SNR_dB = np.linspace(10, 14, datapoints)
+    SNR = 10**(SNR_dB/20)
+    pa = np.zeros((datapoints,L))
+    i=0
+    for snr in SNR:
+        # The channel capacity of the AWGN channel 
+        #snr = P / sigma**2
+        C = 0.5 * np.log2(1 + snr)
+        # A good starting point for the parameters is:
+        a=R/C
+        f=R/C
+        pa[i,:] = pa_parameterised(L, C, P, a, f)
+        i=i+1
+    # checking that the total power adds up to P
+    print('All the following numbers should be '+ str(P) + ': ', np.sum(pa,1))
+    fig, ax = plt.subplots()
+    ax.plot(pa[0,:], 'b--', label='$SNR_{dB}$='+str(SNR_dB[0])) 
+    ax.plot(pa[1,:], 'k--', label='$SNR_{dB}$='+str(SNR_dB[1]))
+    ax.plot(pa[2,:], 'm--', label='$SNR_{dB}$='+str(SNR_dB[2]))
+    ax.plot(pa[3,:], 'c--', label='$SNR_{dB}$='+str(SNR_dB[3]))
+    ax.plot(pa[4,:], 'r--', label='$SNR_{dB}$='+str(SNR_dB[4]))
+
+    plt.xlabel('L')
+    plt.ylabel('Power Allocation')
+    plt.legend(loc=6, prop={'size': 7})
+    plt.title("The power allocation for a rate 1 SPARC with different SNRs")
+    plt.show()
+
+
     '''
     #######################################
     # Plot plain SPARCs with different overall rates for a high number of repeats
@@ -1122,12 +1169,12 @@ if __name__ == "__main__":
     # And SPARC with no outer code and overall rate 5/6
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
-    sparcparams = SPARCParams(L=768, M=512, sigma=None, p=1.8, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, datapoints=15, MIN_ERRORS=200, MAX_BLOCKS=200, csv_filename='EbN0_dBVsBER_waterfall_rep200_5.csv', png_filename='EbN0_dBVsBER_waterfall_rep200_5.png')
+    sparcparams = SPARCParams(L=512, M=512, sigma=None, p=2.5, r=1, t=64)
+    waterfall(sparcparams, ldpcparams, pa_param=True, datapoints=15, MIN_ERRORS=1, MAX_BLOCKS=1, csv_filename='EbN0_dBVsBER_waterfall_rep200_pa1.csv', png_filename='EbN0_dBVsBER_waterfall_rep200_pa1.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
     '''
-    
+    '''
     #########################################
     # Plot hard and soft loops
     ldpcparams = LDPCParams('802.16', '5/6', None)
@@ -1135,5 +1182,5 @@ if __name__ == "__main__":
     soft_hard_plot(soft=True, hard=True, sec=569, soft_iter=2, sparcparams= sparcparams, ldpcparams=ldpcparams, csv_filename='EbN0VsBER_soft_hard_100_4.csv', png_filename='EbN0VsBER_soft_hard_100_4.png', datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100)
     
     print("Wall clock time elapsed: ", time.time()-t0)
-    
+    '''
     

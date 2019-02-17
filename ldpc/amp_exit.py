@@ -302,7 +302,7 @@ if __name__ == "__main__":
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
 	bin_number = 500
 	repeats = 40
-	datapoints = 5
+	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -311,7 +311,7 @@ if __name__ == "__main__":
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(9, 13, datapoints)
+	snr_dB = np.linspace(10, 13, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:

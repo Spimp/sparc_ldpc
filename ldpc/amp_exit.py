@@ -45,7 +45,8 @@ def gen_bits(length):
 # it then produces a hard initialisation for the amp decoder y_new which only contains sections
 # which were note decoded well in the A and then bp2sp conversion.
 def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
-	beta_0 = beta/np.sqrt(n*np.repeat(Pl, M))
+	# note that beta is already normalized
+	beta_0 = beta
 
 	# store the sections which we still want to perform amp decoding on
 	amp_sections = []
@@ -54,9 +55,9 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 	for l in range(L):
 		# find the index of any element that has probability greater than threshold
 		idx = np.where(beta_0[l*M:(l+1)*M]>threshold)
-		assert idx[0].size<=1
+		#assert idx[0].size<=1
 		# if the section contains a position with this probability
-		if idx[0].size!=0:
+		if idx[0].size==1:
 			# set all positions to zero
 			beta_0[l*M:(l+1)*M] = 0
 			# set the position corresponding the probability greater than threshold to 1
@@ -75,6 +76,8 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 	ordering_reduced = ordering[amp_sections,:]
 	# run amp on the remaining sections
 	Ab_new, Az_new = sparc_transforms_shorter(L_amp_sections, M, n, ordering_reduced)
+
+	print("L_amp_sections: ", L_amp_sections)
 
 	return y_new, Ab_new, Az_new, amp_sections, L_amp_sections
 
@@ -170,6 +173,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 	bitwise_a = 1/(1+np.exp(A))
 	# convert this to sectionwise posterior probabilities
 	beta_0 = bp2sp(bitwise_a, L, M)
+	print("max in beta_0: ", np.max(beta_0))
 	# perform amp decoding on these beta_0
 	sigma=None # this value isn't actually used in the function so doesn't matter
 	# Generate y, Ab, and Az to pass into amp()
@@ -377,11 +381,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams)#, csv_filename='E_data_L512_M512_40reps_500bins_r1_P4_pa3.csv')
-					E = np.nan_to_num(E)
-					###################
-					# testing out the line below. Also see line 152
-					np.clip(E, -55, 55, out=E)
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.45, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -415,8 +415,8 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	#plt.savefig('amp_exitchart_L512_M512_40reps_500bins_r1_P4_pa3.png')	
-	plt.show()
+	plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
+	#plt.show()
 	
 	'''
 	

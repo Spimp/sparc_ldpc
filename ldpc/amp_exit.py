@@ -39,6 +39,44 @@ def J(sigma):
 def gen_bits(length):
 	# multiply by -2 and add one so have -1s and 1s
 	return (np.random.randint(0,2,length)*-2)+1
+ 
+# This function takes in our sectionwise posterior probabilities as beta, which is the output
+# from the bp2sp conversion performed on the LLRS from A. 
+# it then produces a hard initialisation for the amp decoder y_new which only contains sections
+# which were note decoded well in the A and then bp2sp conversion.
+def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
+	beta_0 = beta/np.sqrt(n*np.repeat(Pl, M))
+
+	# store the sections which we still want to perform amp decoding on
+	amp_sections = []
+	# keep track of the number of sections in the amp
+	L_amp_sections = 0
+	for l in range(L):
+		# find the index of any element that has probability greater than threshold
+		idx = np.where(beta_0[l*M:(l+1)*M]>threshold)
+		assert idx[0].size<=1
+		# if the section contains a position with this probability
+		if idx[0].size!=0:
+			# set all positions to zero
+			beta_0[l*M:(l+1)*M] = 0
+			# set the position corresponding the probability greater than threshold to 1
+			beta_0[(l*M)+idx[0]] = 1	
+		else:
+			# else the section does not contain any high probability componenets
+			# set all sections to zero
+			beta_0[l*M:(l+1)*M]=0
+			# add the section to amp_sections so we can include it in the rows kept from ordering
+			amp_sections.append(l)
+			L_amp_sections += 1
+	# hard decision initialisation
+	# peel off contributions from the decoded sections from y to generate y'
+	x_remove = Ab(beta_0)
+	y_new = y - x_remove
+	ordering_reduced = ordering[amp_sections,:]
+	# run amp on the remaining sections
+	Ab_new, Az_new = sparc_transforms_shorter(L_amp_sections, M, n, ordering_reduced)
+
+	return y_new, Ab_new, Az_new, amp_sections, L_amp_sections
 
 # Function produces y from X a series of bits for inputting into the amp() function
 # X: array of LlogM input bits
@@ -75,7 +113,7 @@ def prep_y(X, L, M, n, sigma_w, P, a=None, f=None, C=None):
 	w = np.random.randn(n, 1) * sigma_w
 	y = (x + w).reshape(-1, 1)
 
-	return y, Ab, Az, Pl
+	return y, Ab, Az, Pl, ordering
 
 # a and b are 2 numpy array of the same length.
 # When there is a zero in both a and b at the same index, this is removed from both arrays. 
@@ -98,11 +136,11 @@ def remove_common_zeros(a, b):
 # snr_dB is the snr of the simulation of the channel 
 # E is the LLRs on the a posteriori information from the AMP decoder
 # returns E
-def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
+def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 	# Sparc parameters
 	L = sparcparams.L
 	M = sparcparams.M
-	logm = np.log2(M)
+	logm = int(np.log2(M))
 	P=sparcparams.p
 	r_sparc = sparcparams.r
 	T = sparcparams.t
@@ -135,18 +173,28 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None):
 	# perform amp decoding on these beta_0
 	sigma=None # this value isn't actually used in the function so doesn't matter
 	# Generate y, Ab, and Az to pass into amp()
-	y, Ab, Az, Pl = prep_y(X, L, M, n, sigma_w, P, a, f, C)
-	beta_T = amp(y, sigma, Pl, L, M, T, Ab, Az, beta_0*np.sqrt(n*np.repeat(Pl,M))).reshape(-1)
+	y, Ab, _, Pl, ordering = prep_y(X, L, M, n, sigma_w, P, a, f, C)
+
+	y_new, Ab_new, Az_new, amp_sections, L_amp_sections = hard_initialisation(beta_0, L, M, n, ordering, y, Pl, Ab, threshold)
+
+	beta_T = amp(y_new, sigma, Pl[amp_sections], L_amp_sections, M, T, Ab_new, Az_new).reshape(-1)
 
 	# convert sectionwise posterior probabilities to bitwise posterior probabilities
-	sectionwise = beta_T/np.sqrt(n*np.repeat(Pl,M))
-	bitwise_e = sp2bp(sectionwise, L, M)
+	sectionwise = beta_T/np.sqrt(n*np.repeat(Pl[amp_sections],M))
+	bitwise_e = sp2bp(sectionwise, L_amp_sections, M)
 	# clip the bitwise_e to avoid a divide by zero error in the log
 	#np.clip(bitwise_e, 0.00000000000000000000000001, 1-0.00000000000000000000000001, out=bitwise_e)
 	# convert bitwise post. to LLRs 
-	E = np.log(1-bitwise_e)-np.log(bitwise_e)
+	E_amp_sections = np.log(1-bitwise_e)-np.log(bitwise_e)
 	# set -inf and +inf to real numbers with v large magnitude
-	E=np.nan_to_num(E)
+	E_amp_sections=np.nan_to_num(E_amp_sections)
+	# keep the LLRs corresponding to the sections hard decoded before performing amp
+	E = A
+	# convert amp_sections to the a list of all the positions in these sections
+	amp_positions = np.tile(np.linspace(0,logm-1,logm,dtype=np.dtype(np.int16)),L_amp_sections)
+	amp_positions = amp_positions + logm*np.repeat(amp_sections, logm)
+	# replace the LLRs for the amp_sections with the new LLRs
+	E[amp_positions] = E_amp_sections
 	###########################
 	#Note testing out line below. 
 	np.clip(E, -55, 55, out=E)
@@ -300,8 +348,8 @@ if __name__ == "__main__":
 
 	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	bin_number = 500
-	repeats = 40
+	bin_number = 125
+	repeats = 100
 	datapoints = 4
 	I_a_range = np.linspace(0, 0.9, 10)
 	P = 4
@@ -329,7 +377,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, csv_filename='E_data_L512_M512_40reps_500bins_r1_P4_pa3.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams)#, csv_filename='E_data_L512_M512_40reps_500bins_r1_P4_pa3.csv')
 					E = np.nan_to_num(E)
 					###################
 					# testing out the line below. Also see line 152
@@ -360,15 +408,15 @@ if __name__ == "__main__":
 	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
 	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
 	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exitchart_L512_M512_40reps_500bins_r1_P4_pa3.png')	
-	#plt.show()
+	#plt.savefig('amp_exitchart_L512_M512_40reps_500bins_r1_P4_pa3.png')	
+	plt.show()
 	
 	'''
 	

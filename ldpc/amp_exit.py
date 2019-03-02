@@ -4,10 +4,12 @@ import math as math
 from pylab import * 
 import py.ldpc as ldpc
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import time
 import csv
 from bitarray import bitarray
 from sparc_ldpc import * 
+import EXIT_chart as exit
 
 class imported_E:
 	def __init__(self, X, E, I_a, SNR_dB):
@@ -43,7 +45,7 @@ def gen_bits(length):
 # This function takes in our sectionwise posterior probabilities as beta, which is the output
 # from the bp2sp conversion performed on the LLRS from A. 
 # it then produces a hard initialisation for the amp decoder y_new which only contains sections
-# which were note decoded well in the A and then bp2sp conversion.
+# which were not decoded well in the A and then bp2sp conversion.
 def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 	# note that beta is already normalized
 	beta_0 = beta
@@ -56,14 +58,14 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 		# find the index of any element that has probability greater than threshold
 		idx = np.where(beta_0[l*M:(l+1)*M]>threshold)
 		#assert idx[0].size<=1
-		# if the section contains a position with this probability
+		# if the section contains a single position with the probability greater than the threshold
 		if idx[0].size==1:
 			# set all positions to zero
 			beta_0[l*M:(l+1)*M] = 0
-			# set the position corresponding the probability greater than threshold to 1
+			# set the position corresponding to the probability greater than the threshold to 1
 			beta_0[(l*M)+idx[0]] = 1	
 		else:
-			# else the section does not contain any high probability componenets
+			# else the section does not contain any high probability components
 			# set all sections to zero
 			beta_0[l*M:(l+1)*M]=0
 			# add the section to amp_sections so we can include it in the rows kept from ordering
@@ -74,10 +76,13 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 	x_remove = Ab(beta_0)
 	y_new = y - x_remove
 	ordering_reduced = ordering[amp_sections,:]
-	# run amp on the remaining sections
-	Ab_new, Az_new = sparc_transforms_shorter(L_amp_sections, M, n, ordering_reduced)
-
-	print("L_amp_sections: ", L_amp_sections)
+	if L_amp_sections>0:
+		# run amp on the remaining sections
+		Ab_new, Az_new = sparc_transforms_shorter(L_amp_sections, M, n, ordering_reduced)
+	else:
+		Ab_new = None
+		Az_new = None
+	#print("L_amp_sections: ", L_amp_sections)
 
 	return y_new, Ab_new, Az_new, amp_sections, L_amp_sections
 
@@ -173,7 +178,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 	bitwise_a = 1/(1+np.exp(A))
 	# convert this to sectionwise posterior probabilities
 	beta_0 = bp2sp(bitwise_a, L, M)
-	print("max in beta_0: ", np.max(beta_0))
+	#print("max in beta_0: ", np.max(beta_0))
 	# perform amp decoding on these beta_0
 	sigma=None # this value isn't actually used in the function so doesn't matter
 	# Generate y, Ab, and Az to pass into amp()
@@ -181,24 +186,30 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 
 	y_new, Ab_new, Az_new, amp_sections, L_amp_sections = hard_initialisation(beta_0, L, M, n, ordering, y, Pl, Ab, threshold)
 
-	beta_T = amp(y_new, sigma, Pl[amp_sections], L_amp_sections, M, T, Ab_new, Az_new).reshape(-1)
 
-	# convert sectionwise posterior probabilities to bitwise posterior probabilities
-	sectionwise = beta_T/np.sqrt(n*np.repeat(Pl[amp_sections],M))
-	bitwise_e = sp2bp(sectionwise, L_amp_sections, M)
-	# clip the bitwise_e to avoid a divide by zero error in the log
-	#np.clip(bitwise_e, 0.00000000000000000000000001, 1-0.00000000000000000000000001, out=bitwise_e)
-	# convert bitwise post. to LLRs 
-	E_amp_sections = np.log(1-bitwise_e)-np.log(bitwise_e)
-	# set -inf and +inf to real numbers with v large magnitude
-	E_amp_sections=np.nan_to_num(E_amp_sections)
 	# keep the LLRs corresponding to the sections hard decoded before performing amp
 	E = A
-	# convert amp_sections to the a list of all the positions in these sections
-	amp_positions = np.tile(np.linspace(0,logm-1,logm,dtype=np.dtype(np.int16)),L_amp_sections)
-	amp_positions = amp_positions + logm*np.repeat(amp_sections, logm)
-	# replace the LLRs for the amp_sections with the new LLRs
-	E[amp_positions] = E_amp_sections
+	# if there are no amp sections we just keep E=A.
+	if L_amp_sections>0:
+		beta_T = amp(y_new, sigma, Pl[amp_sections], L_amp_sections, M, T, Ab_new, Az_new).reshape(-1)
+
+		# convert sectionwise posterior probabilities to bitwise posterior probabilities
+		sectionwise = beta_T/np.sqrt(n*np.repeat(Pl[amp_sections],M))
+		#print("sum of sectionwise is: ", np.sum(sectionwise))
+		#print("sum of sectionwise should be: ", L_amp_sections)
+		bitwise_e = sp2bp(sectionwise, L_amp_sections, M)
+		# clip the bitwise_e to avoid a divide by zero error in the log
+		#np.clip(bitwise_e, 0.00000000000000000000000001, 1-0.00000000000000000000000001, out=bitwise_e)
+		# convert bitwise post. to LLRs 
+		E_amp_sections = np.log(1-bitwise_e)-np.log(bitwise_e)
+		# set -inf and +inf to real numbers with v large magnitude
+		E_amp_sections=np.nan_to_num(E_amp_sections)
+	
+		# convert amp_sections to a list of all the positions in these sections
+		amp_positions = np.tile(np.linspace(0,logm-1,logm,dtype=np.dtype(np.int16)),L_amp_sections)
+		amp_positions = amp_positions + logm*np.repeat(amp_sections, logm)
+		# replace the LLRs for the amp_sections with the new LLRs
+		E[amp_positions] = E_amp_sections
 	###########################
 	#Note testing out line below. 
 	np.clip(E, -55, 55, out=E)
@@ -315,17 +326,168 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 					#print(str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i)))
 	return imported_E_dict
 
+# Parameters: I_a array containing all the I_a for the EXIT curve. 
+# I_e array containing the corresponding I_e values. 
+# Returns the 3rd order polynomial that best fits an EXIT curve based on LS
+# i.e. returns array of the polynomial coefficients. 
+# return has order c0,c1,c2,c3 where c0 is the constant and c3 is the coefficient of I_a^3
+def polynomial(I_a, I_e):
+	a = np.zeros((len(I_a), 4))
+	for i in range(4):
+		a[:,i] = I_a**i
+	c = np.linalg.lstsq(a, I_e, rcond=-1)[0]
+	return c	
+
+# returns I_E_VND, the output from the combined AMP decoder and VND
+# The amp exit curve is represented by a 3rd order polynomial equation
+# with the coefficients passed in as array poly_coeff
+# d_v is the degree of the variable node in question
+def I_E_VND_amp(I_A_VND, d_v, poly_coeff):
+	I_A_amp = J(np.sqrt(d_v)*J_inverse(I_A_VND))
+	print("I_A_amp is: ", I_A_amp)
+	I_E_amp = np.sum(poly_coeff * np.array([1, I_A_amp, I_A_amp**2, I_A_amp**3]))
+	# clip I_E_amp at a max of I_E_amp as it cannot exceed this
+	I_E_amp = np.clip(I_E_amp, a_min=None, a_max=1)
+	I_E_VND = J(np.sqrt((d_v-1)*(J_inverse(I_A_VND))**2+(J_inverse(I_E_amp))**2))
+	return I_E_VND
+
+# calculate the array I_E_VND as a function of I_A_VND and I_A_amp over a range of d_vs.
+# dv_count the num of variable nodes with degree equal to its index.
+# b_v the fraction of edges incident to variables nodes of degree equivalent to the index
+# poly_coeff the 3rd order polynomial fit to the amp exit chart.
+def I_E_VND_amp_array(I_A_VND_array, dv_count, b_v, poly_coeff):
+	I_E_VND = np.zeros(I_A_VND_array.shape)
+	for i in range(len(dv_count)):
+		# dv_count gives the num of variable nodes with degree equal to its index.
+		# when this is zero means there are no v nodes with this degree so skip it
+		if dv_count[i]!=0:
+			for j in range(len(I_E_VND)):
+				I_E_VND[j] = I_E_VND[j]+b_v[i]*I_E_VND_amp(I_A_VND_array[j], i, poly_coeff)
+	return I_E_VND
+
+# Plot the exit charts for the combined amp and VND and the CND
+# This function is for a fixed value of CND.
+# the ldpc curve can have variable nodes of different degrees
+# Params:
+# poly_coeff - the coefficients of the 3rd order polynomial representating the amp exit curve
+# dv_total gives the total number of variable nodes
+# a_v array giving the fraction of variable nodes of the degree equal to its index 
+# R_ldpc the rate of the ldpc code
+def plot_amp_ldpc_exit(poly_coeff, dv_total, a_v, d_c, R_ldpc):
+	# use a_v and dv_total to calculate dv_count
+	# dv_count gives the num of variable nodes with degree equal to its index.
+	dv_count = a_v*dv_total
+	dv_degrees = np.linspace(0,len(dv_count),len(dv_count)+1,dtype=np.dtype(np.int16))
+	# calculating the fraction of edges incident to variables nodes of degree equivalent to the index
+	b_v = (dv_degrees*a_v)/((1-R)*d_c)
+
+	# plot I_E,VND as a func of I_A,VND and I_A_amp
+	I_A_VND = linspace(0.05,1,20)
+	I_E_VND = I_E_VND_amp_array(I_A_VND, dv_count, b_v, poly_coeff)
+
+
+	I_A_CND = linspace(0.1, 1, 19)
+	I_E_CND = np.zeros(I_A_CND.shape)
+	for k in range(len(I_E_CND)):
+		I_E_CND[k] = 1 - exit.I_E_REP(I_A_CND[k], d_c)
+	fig, ax = plt.subplots()
+	plt.plot(I_A_VND[:len(I_E_VND)], I_E_VND, color='k', linestyle='-', label = 'VND')
+	plt.plot(I_E_CND, I_A_CND, color='r', linestyle='-', label = 'CND')
+	plt.xlabel('$I_{A,VND}, I_{E,CND}$', fontsize=18) 
+	plt.ylabel('$I_{E,VND}, I_{A,CND}$', fontsize=18)
+	plt.tight_layout()
+	plt.legend()
+	plt.show()
+
+def plane_intersect(a, b, plot=False):
+	"""
+	a, b   4-tuples/lists
+	       Ax + By +Cz + D = 0
+	       A,B,C,D in order  
+
+	output: a point on line of intersection and the direction of the line of intersection
+	"""
+	a_vec, b_vec = np.array(a[:3]), np.array(b[:3])
+	# direction of line of intersection
+	aXb_vec = np.cross(a_vec, b_vec)
+	# point on line of intersection
+	A = np.array([a_vec[:2],b_vec[:2]])
+	x = np.linalg.solve(A, np.array([-1*a[3],-1*b[3]]))
+	# so point on plane is [x[0],x[1],0]
+	point = np.array([x[0],x[1],0])
+	if plot:	
+		# find a1 and a2 in terms of a3
+		a3 = np.array([0,1])
+		t = aXb_vec[2]*a3
+		a1 = x[0] + aXb_vec[0]*t
+		a2 = x[1] + aXb_vec[1]*t
+		print("A point on the line is:", point)
+		print("The direction of the line is: ", aXb_vec)
+		fig, ax = plt.subplots()
+		plt.plot(a1,a2,'k-')
+		plt.axhline(y=0, color='r', linestyle='-', label='Shannon limit')
+		plt.plot()
+		plt.xlabel("$a_1$")
+		plt.ylabel("$a_2$")
+		plt.show()
+	return point, aXb_vec
+
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=512
-	M=512
+	L=256
+	M=32
 	logm = np.log2(M)
 	R_sparc = 1
+	R_ldpc = 5/6
+	d_c=8
 
 	export = True
-	'''
+	# the average value of d_v
+	dv_bar = (1-R_ldpc)*d_c
 	
+	poly_coeff = np.array([ 0.54191334, -0.09699622, -0.37618619, 1.01154714])
+	# working with an ldpc code where d_v,1=2, d_v,2=4, d_v,3=18
+	d_v1=1
+	d_v2=3
+	d_v3=6
+
+	a_v = np.zeros(10)
+	# have 2 planes which define the values of the a_v
+	a, b = (d_v1, d_v2, d_v3, -dv_bar), (1, 1, 1, -1)
+	# point on line of intersection point and direction of line d
+	point, d = plane_intersect(a, b)
+
+	# find a1 and a2 in terms of a3
+	a_v[d_v3] = 0.05
+	A = np.array([[d_v1,d_v2],[1,1]])
+	b = np.array([dv_bar-d_v3*a_v[d_v3], 1-a_v[d_v3]])
+	# solve the simulataneous equations with a3 fixed
+	print(A)
+	print(b)
+	x = np.linalg.solve(A,b)
+	a_v[d_v1] = x[0]
+	a_v[d_v2] = x[1]
+	print(a_v)
+	a_v = np.round(a_v, 3)
+	print(a_v)
+
+	'''
+	a1, a2 = np.meshgrid(np.linspace(0,1,2),linspace(0,1,2))
+	a3_1 = 1/d_v3 *(4/3 - d_v1*a1 - d_v2*a2)
+	a3_2 = 1 - a1 - a2
+
+	fig = plt.figure()
+	ax = fig.add_subplot(111, projection='3d')
+	ax.plot_surface(a1,a2,a3_2)
+	ax.plot_surface(a1,a2,a3_1)
+	ax.set_xlabel("a1")
+	ax.set_ylabel("a2")
+	ax.set_zlabel("a3")
+	plt.show()
+	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
+	'''
+	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
 	print(X)
@@ -349,29 +511,31 @@ if __name__ == "__main__":
 	print("negative variance: ", var_neg)
 	
 	'''
-
 	
+	
+	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
 	bin_number = 125
-	repeats = 100
-	datapoints = 4
-	I_a_range = np.linspace(0, 0.9, 10)
+	repeats = 150
+	datapoints = 1
+	x_axis_points=30
+	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
 		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
-	I_e_accum = np.zeros((datapoints,10))
-	snr_dB = np.linspace(10, 13, datapoints)
+	I_e_accum = np.zeros((datapoints,x_axis_points))
+	snr_dB = np.linspace(10, 10, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
 			# channel capacity
 			snr = 10**(s_dB/20)
 			C = 0.5 * np.log2(1 + snr)
-			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
-			I_e = np.zeros(10)
+			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64)#, a=R_sparc/C, C=C, f=R_sparc/C)
+			I_e = np.zeros(x_axis_points)
 			i=0
 			for I_a in I_a_range:
 				a = None
@@ -381,7 +545,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.45, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.7)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -401,26 +565,38 @@ if __name__ == "__main__":
 			I_e_accum[j,:] = I_e_accum[j,:] + I_e
 			j=j+1
 	I_e_accum = I_e_accum/repeats
+	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
+	# for snr=10dB
+	poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
+	# Note that this will give the constant first and the coefficient of I_a**3 last
+	print("The coefficients for the polynomial are: ",poly_coeff)
 	print("Wall clock time elapsed: ", time.time()-t0)
 
 	fig, ax = plt.subplots()
 	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
-	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
+	# plot the polynomial representation of this exit curve 
+	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
+	ones = np.ones((101, 1))
+	# multiply the polynomial coefficients by the different values of I_A_amp and it's powers
+	I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
+	ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
-	#plt.show()
-	
+	#plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
+	plt.show()
+	'''
 	'''
 	
 	#############################
+	# plot histogram of the sectionwise probabilities for the correct position
 	I_a = 0.5
 	repeats = 20
 	beta_plot = np.array([])

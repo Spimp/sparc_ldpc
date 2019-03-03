@@ -32,7 +32,7 @@ if hard:
 
 i=0
 j=0
-with open('EbN0VsBER_soft_hard_100.csv') as myfile:
+with open('EbN0VsBER_soft_hard_100_3.csv') as myfile:
 		reader_soft = csv.DictReader(myfile)
 		for row in reader_soft:
 			EbN0_dB[i] = row['EbN0_dB']
@@ -65,7 +65,7 @@ EbN0c_dB = 20*log10(EbN0c)
 # plot the figure. Comment and uncomment lines as desired to plot the lines you want
 fig, ax = plt.subplots()
 ax.set_yscale('log', basey=10)
-ax.plot(EbN0_dB, BER_sparc, 'g:', label = 'SPARC w/ same overall rate')
+ax.plot(EbN0_dB, BER_sparc, 'g:', label = 'Plain SPARC')
 if soft:
     # comment out and add lines below as appropriate
     #ax.plot(EbN0_dB, BER_amp_soft[:,0], 'b:', label = 'SPARC w/ outer code: after AMP')
@@ -82,4 +82,4 @@ plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how t
 plt.ylabel('BER', fontsize=15)
 plt.tight_layout()
 plt.legend(loc=1, prop={'size': 9})
-plt.savefig('EbN0VsBER_soft_hard_100_refined.png')
+plt.savefig('EbN0VsBER_soft_hard_100_3_refined.png')

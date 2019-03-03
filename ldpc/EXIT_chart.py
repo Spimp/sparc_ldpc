@@ -41,17 +41,18 @@ def I_A_CND(I_E, dc):
 	sigma = (J_inverse(1-I_E))/np.sqrt(dc-1)
 	return 1-J(sigma)
 
-def I_E_CND(I_A, dc):
+# I_E_CND=1-I_E_REP So this function is used to calculate I_E_CND
+def I_E_REP(I_A, dc):
 	sigma = np.sqrt(dc-1)*J_inverse(1-I_A)
-	return 1 -J(sigma)
+	return J(sigma)
+
 
 if __name__ == "__main__":
 	# as often dealing with fractions, the value of z shouldn't matter
 	z=1
 	# rate of the ldpc code
 	R=5/6
-	# Use an EbN0 of roughyl 1dB
-	EbN0_dB = 7
+	EbN0_dB = 10
 	EbN0 = 10**(EbN0_dB/20)
 
 	num_rows = proto.shape[0]
@@ -90,7 +91,7 @@ if __name__ == "__main__":
 	I_Av = linspace(0, 1, 21)
 	I_Ev = np.zeros(I_Av.shape)
 	for i in range(len(dv_count)):
-		# dv_degrees gives the num of variable nodes with degree equal to its index.
+		# dv_count gives the num of variable nodes with degree equal to its index.
 		# when this is zero means there are no v nodes with this degree so skip it
 		if dv_count[i]!=0:
 			for j in range(len(I_Ev)):
@@ -111,14 +112,15 @@ if __name__ == "__main__":
 	for k in range(len(dc_count)):
 		if dc_count[k]!=0:
 			for j in range(len(I_Ec)):
-				I_Ec[j] = I_Ec[j] + b_c[k]*I_E_CND(I_Ac[j], k)
-
+				I_Ec[j] = I_Ec[j] + b_c[k]*I_E_REP(I_Ac[j], k)
+	# subtract from 1 to complete the approximation. See equation 4 in Jossy's paper.
+	I_Ec = 1-I_Ec
 
 	fig, ax = plt.subplots()
 	plt.plot(I_Av, I_Ev, color='k', linestyle='-', label = 'VND')
 	plt.plot(I_Ec, I_Ac, color='r', linestyle='-', label = 'CND')
-	plt.xlabel('I_A,VND, I_E,CND') # at some point need to work out how to write this so it outputs properly
-	plt.ylabel('I_E_VND, I_A,CND')
+	plt.xlabel('$I_{A,VND}, I_{E,CND}$', fontsize=18) # at some point need to work out how to write this so it outputs properly
+	plt.ylabel('$I_{E,VND}, I_{A,CND}$', fontsize=18)
 	plt.tight_layout()
 	plt.legend()
 	plt.show()

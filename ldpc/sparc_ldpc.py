@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import time
 import csv
 from bitarray import bitarray
-
+import amp_exit as ae
 
 # Code taken from Adam's python tutorial. 
 # I have removed the power allocation code as I'm using a uniform power allocation
@@ -345,6 +345,16 @@ def bits2indices(bits, m: "m must be a power of 2"):
         indices.append(digit)
 
     return indices
+
+# calculate the bit error rate for a set of LLRs compared to the original input indices
+def ber_from_LLRs(M, LLR, input_indices, total_bits):
+    # get hard decision on bits from the LLRs
+    v_output = (LLR<0.0)
+    # convert the bits to indices
+    v_indices = bits2indices(v_output, M)
+    # compute BER after ldpc decoding
+    ber_ldpc.append(sum(bin(a^b).count('1') for (a, b) in zip(input_indices, v_indices))/total_bits)
+
 
 # note removed r_pa from function as never use it
 # a, f, and C control the parameterised power allocation
@@ -728,6 +738,173 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
    
     return ber_amp, ber_ldpc, R
 
+# Function to calculate the BER for the soft information exchange but with a hard intialisation approach
+# threshold is used in the hard initialisation. If an ldpc section has a probability greater than the threshold
+# it is hard decoded and it's contribution removed from the channel output. It then retains it's LLR 
+# value from before AMP decoding so soft information exchange can continue. 
+def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_iter, threshold):
+    # arrays to store the return values of the ber
+    # bit error rate after each round of amp decoding
+    ber_amp = []
+    # ber after each round of ldpc decoding
+    ber_ldpc = []
+
+    #Get the SPARC parameters from the struct
+    L = sparcparams.L
+    M = sparcparams.M
+    P = sparcparams.p
+    sigma = sparcparams.sigma
+    r_sparc = sparcparams.r
+    #r_pa_sparc = sparcparams.r_pa
+    T = sparcparams.t
+
+    # calculate some additional parameters 
+    # Compute the SNR, capacity, and n, from the input parameters
+    snr = P / sigma**2
+    #C = 0.5 * np.log2(1 + snr)
+    n = int(L*np.log2(M) / r_sparc)
+    # compute additional parameters
+    logm = np.log2(M)
+    total_bits = int(logm*L)
+    
+    # Generate the power allocation
+    # uniform power allocation across sections
+    Pl = P/L * np.ones(L)
+    
+    standard = ldpcparams.standard
+    r_ldpc = ldpcparams.r_ldpc
+    z = ldpcparams.z
+    ptype = ldpcparams.ptype
+    # initialise the ldpc code
+    ldpc_code = ldpc.code(standard, r_ldpc, z, ptype)
+    nl = ldpc_code.N
+    kl = ldpc_code.K
+
+    assert nl<=(L*logm)
+    # we want the ldpc to cover a complete number of sections and not just part of the final section it covers. 
+    assert nl%logm == 0
+    #(L, M, sigma, P, R, T, R_PA, R_LDPC):
+
+    # Generate random message in 2 stages
+    # First generate ldpc bits
+    protected_bits = np.random.randint(0, 2, kl).tolist()
+    assert len(protected_bits) == kl
+    # Encode the protected_bits using the ldpc code 
+    ldpc_bits = ldpc_code.encode(protected_bits).tolist() 
+    # Generate the remaining bits required
+    unprotected_bits = np.random.randint(0, 2, int(total_bits-nl)).tolist()
+    # concatenate the ldpc and unprotected bits      
+    sparc_bits = unprotected_bits+ldpc_bits
+    assert len(sparc_bits)==total_bits
+    # convert the bits to indices for encoding
+    sparc_indices = bits2indices(sparc_bits, M)
+    assert len(sparc_indices)==L
+       
+    # Generate the SPARC transform functions A.beta and A'.z
+    Ab, Az, ordering = sparc_transforms(L, M, n)
+    # Generate our transmitted signal X
+    β_0 = np.zeros((L*M, 1))
+    for l in range(L):
+        β_0[l*M + sparc_indices[l]] = np.sqrt(n * Pl[l])
+    x = Ab(β_0)
+    # check that the power has been allocated uniformly. This should be approx equal to one when divided by the snr. 
+    #print("Average power/snr is ", np.mean(x**2)/snr)
+    # Generate random channel noise and then received signal y
+    z = np.random.randn(n, 1) * sigma
+    y = (x + z).reshape(-1, 1)
+    
+    # Run AMP decoding
+    β = amp(y, sigma, Pl, L, M, T, Ab, Az).reshape(-1)
+    # Output the results of just AMP decoding
+    
+    # Convert decoded beta back to a message
+    rx_message = []
+    for l in range(L):
+        idx = np.argmax(β[l*M:(l+1)*M])
+        rx_message.append(idx)
+    
+    # Compute fraction of sections decoded correctly with just AMP decoding
+    #correct_amp = np.sum(np.array(rx_message) == np.array(sparc_indices)) / L
+    #print("Fraction of sections decoded correctly with amp: ", correct_amp)
+    
+    # Compute BER for just sparc
+    ber_amp.append(sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/total_bits)
+
+    beta_amp = β
+    rx_message_amp = rx_message
+    # Get the sectionwise posterior probabilities by dividing β by the power in each section. 
+    # This converts each section in β to a valid probability distribution.
+    sectionwise_posterior = beta_amp/np.sqrt(n*np.repeat(Pl, M))
+    #print('sectionwise posterior sum ', sum(sectionwise_posterior))
+    # remember only want to perform ldpc decoding on sections covered by the ldpc code
+    ldpc_sections = int(nl/logm)
+    # convert sectionwise to bitwise posterior probabilities for all sections
+    bitwise_posterior = sp2bp(sectionwise_posterior, L, M) 
+    # computer the log likelihood ratio for decoding
+    LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
+    # set -inf and +inf to real numbers with v large magnitude
+    LLR = np.nan_to_num(LLR)
+    for i in range(soft_iter):
+        # perform ldpc decoding on the LDPC sections
+        (app, it) = ldpc_code.decode(LLR[(L-ldpc_sections)*logm:])
+        # Replace the ldpc LLRS in the LLRs from AMP decoding
+        LLR[(L-ldpc_sections)*logm:] = app
+        # compute BER after ldpc decoding
+        ber_ldpc.append(ber_from_LLRs(M, LLR, sparc_indices, total_bits))
+        # want to finish the soft iterations on LDPC decoding. 
+        if i==(soft_iter - 1):
+            break
+        
+        # now perform amp decoding using the soft output from the ldpc
+        # get the bitwise a posterior probabilities from the a posterior log likelihood ratios in app
+        bitwise_ldpc = 1/(1+np.exp(app))
+        # check bitwise_ldpc is made up of valid probabilities
+        assert(bitwise_ldpc.all()>=0 and bitwise_ldpc.all()<=1)
+
+        # convert the bitwise posterior to sectionwise posterior
+        sectionwise_ldpc = sectionwise_posterior
+        sectionwise_ldpc[M*(L-ldpc_sections):] = bp2sp(bitwise_ldpc, ldpc_sections, M)
+        #print("sum sectionwise_ldpc ", sum(sectionwise_ldpc))
+
+        # produce the hard initialisation for the amp decoding
+        # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
+        # All sections not covered by the ldpc code will always be involved in the amp decoding. 
+        y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
+        #print("L_amp_sections: ", L_amp_sections)
+        # keep the LLRs corresponding to the sections hard decoded before performing amp
+        # if there are no amp sections we don't change LLR
+        if L_amp_sections>0:
+            # perform amp decoding on the amp sections
+            beta_T = amp(y_new, sigma, Pl[amp_sections], L_amp_sections, M, T, Ab_new, Az_new).reshape(-1)
+
+            # convert sectionwise posterior probabilities to bitwise posterior probabilities
+            sectionwise = beta_T/np.sqrt(n*np.repeat(Pl[amp_sections],M))
+
+            #print("sum of sectionwise is: ", np.sum(sectionwise))
+            #print("sum of sectionwise should be: ", L_amp_sections)
+            bitwise = sp2bp(sectionwise, L_amp_sections, M)
+            # convert bitwise post. to LLRs 
+            LLR_amp_sections = np.log(1-bitwise)-np.log(bitwise)
+            # set -inf and +inf to real numbers with v large magnitude
+            LLR_amp_sections=np.nan_to_num(E_amp_sections)
+        
+            # convert amp_sections to a list of all the positions in these sections
+            amp_positions = np.tile(np.linspace(0,logm-1,logm,dtype=np.dtype(np.int16)),L_amp_sections)
+            amp_positions = amp_positions + logm*np.repeat(amp_sections, logm)
+            # replace the LLRs for the amp_sections with the new LLRs
+            LLR[amp_positions] = LLR_amp_sections
+        # use sectionwise_posterior to store the sectionwise posteriors of the sections which aren't protected by the ldpc
+        # Note this will always be the first (L-ldpc_sections)*M columns of sectionwise
+        sectionwise_posterior[:(L-ldpc_sections)*M] = sectionwise[:(L-ldpc_sections)*M]
+        # calculate the new BER after amp decoding for this new set of LLRs
+        ber_amp.append(ber_from_LLRs(M, LLR, sparc_indices, total_bits))
+    # overall rate of the code
+    R = (L*logm - (nl-kl))/n
+
+    #Compute Eb/N0
+    #EbN0 = 1/(2*R) * (P/sigma**2)
+   
+    return ber_amp, ber_ldpc, R
 
  # Code for simulating the AWGN channel   
 def awgn(x, sigma):

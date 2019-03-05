@@ -23,6 +23,9 @@ class imported_E:
 # J and J_inverse based on approximation in the appendix of Design of LDPC Codes for modulation and detection.
 def J_inverse(I):
 	assert I>=0 and I<=1
+	if I==1:
+		I=np.clip(I,a_min=None, a_max=0.9999)
+		print("Warning clipping I from 1 to 0.9999")
 	if (I<=0.3646):
 		return 1.09542*(I**2) + 0.214217*(I) + 2.33727*np.sqrt(I)
 	else:
@@ -46,7 +49,10 @@ def gen_bits(length):
 # from the bp2sp conversion performed on the LLRS from A. 
 # it then produces a hard initialisation for the amp decoder y_new which only contains sections
 # which were not decoded well in the A and then bp2sp conversion.
-def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
+def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5, ldpc_sections=None):
+	if ldpc_sections==None:
+		# all sections covered by the ldpc code
+		ldpc_sections = L
 	# note that beta is already normalized
 	beta_0 = beta
 
@@ -55,9 +61,13 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 	# keep track of the number of sections in the amp
 	L_amp_sections = 0
 	for l in range(L):
-		# find the index of any element that has probability greater than threshold
-		idx = np.where(beta_0[l*M:(l+1)*M]>threshold)
-		#assert idx[0].size<=1
+		if l<L-ldpc_sections:
+			# if the section is not covered by the LDPC code, we always want it to be involved in the amp decoding. 
+			idx = np.array([[],[]])
+		else:
+			# find the index of any element that has probability greater than threshold
+			idx = np.where(beta_0[l*M:(l+1)*M]>threshold)
+			#assert idx[0].size<=1
 		# if the section contains a single position with the probability greater than the threshold
 		if idx[0].size==1:
 			# set all positions to zero
@@ -71,6 +81,7 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5):
 			# add the section to amp_sections so we can include it in the rows kept from ordering
 			amp_sections.append(l)
 			L_amp_sections += 1
+		idx=None
 	# hard decision initialisation
 	# peel off contributions from the decoded sections from y to generate y'
 	x_remove = Ab(beta_0)
@@ -185,8 +196,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 	y, Ab, _, Pl, ordering = prep_y(X, L, M, n, sigma_w, P, a, f, C)
 
 	y_new, Ab_new, Az_new, amp_sections, L_amp_sections = hard_initialisation(beta_0, L, M, n, ordering, y, Pl, Ab, threshold)
-
-
+	#print("L_amp_sections: ", L_amp_sections)
 	# keep the LLRs corresponding to the sections hard decoded before performing amp
 	E = A
 	# if there are no amp sections we just keep E=A.
@@ -344,23 +354,22 @@ def polynomial(I_a, I_e):
 # d_v is the degree of the variable node in question
 def I_E_VND_amp(I_A_VND, d_v, poly_coeff):
 	I_A_amp = J(np.sqrt(d_v)*J_inverse(I_A_VND))
-	print("I_A_amp is: ", I_A_amp)
 	I_E_amp = np.sum(poly_coeff * np.array([1, I_A_amp, I_A_amp**2, I_A_amp**3]))
 	# clip I_E_amp at a max of I_E_amp as it cannot exceed this
-	I_E_amp = np.clip(I_E_amp, a_min=None, a_max=1)
+	I_E_amp = np.clip(I_E_amp, a_min=None, a_max=0.9999)
 	I_E_VND = J(np.sqrt((d_v-1)*(J_inverse(I_A_VND))**2+(J_inverse(I_E_amp))**2))
 	return I_E_VND
 
 # calculate the array I_E_VND as a function of I_A_VND and I_A_amp over a range of d_vs.
-# dv_count the num of variable nodes with degree equal to its index.
+# a_v the fraction of variable nodes with degree equal to its index.
 # b_v the fraction of edges incident to variables nodes of degree equivalent to the index
 # poly_coeff the 3rd order polynomial fit to the amp exit chart.
-def I_E_VND_amp_array(I_A_VND_array, dv_count, b_v, poly_coeff):
+def I_E_VND_amp_array(I_A_VND_array, a_v, b_v, poly_coeff):
 	I_E_VND = np.zeros(I_A_VND_array.shape)
-	for i in range(len(dv_count)):
-		# dv_count gives the num of variable nodes with degree equal to its index.
+	for i in range(len(a_v)):
+		# a_v gives the fraction of variable nodes with degree equal to its index.
 		# when this is zero means there are no v nodes with this degree so skip it
-		if dv_count[i]!=0:
+		if a_v[i]!=0:
 			for j in range(len(I_E_VND)):
 				I_E_VND[j] = I_E_VND[j]+b_v[i]*I_E_VND_amp(I_A_VND_array[j], i, poly_coeff)
 	return I_E_VND
@@ -370,34 +379,33 @@ def I_E_VND_amp_array(I_A_VND_array, dv_count, b_v, poly_coeff):
 # the ldpc curve can have variable nodes of different degrees
 # Params:
 # poly_coeff - the coefficients of the 3rd order polynomial representating the amp exit curve
-# dv_total gives the total number of variable nodes
 # a_v array giving the fraction of variable nodes of the degree equal to its index 
 # R_ldpc the rate of the ldpc code
-def plot_amp_ldpc_exit(poly_coeff, dv_total, a_v, d_c, R_ldpc):
-	# use a_v and dv_total to calculate dv_count
-	# dv_count gives the num of variable nodes with degree equal to its index.
-	dv_count = a_v*dv_total
-	dv_degrees = np.linspace(0,len(dv_count),len(dv_count)+1,dtype=np.dtype(np.int16))
+def plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc):
+	dv_degrees = np.linspace(0,len(a_v)-1,len(a_v),dtype=np.dtype(np.int16))
 	# calculating the fraction of edges incident to variables nodes of degree equivalent to the index
-	b_v = (dv_degrees*a_v)/((1-R)*d_c)
+	b_v = (dv_degrees*a_v)/((1-R_ldpc)*d_c)
 
 	# plot I_E,VND as a func of I_A,VND and I_A_amp
-	I_A_VND = linspace(0.05,1,20)
-	I_E_VND = I_E_VND_amp_array(I_A_VND, dv_count, b_v, poly_coeff)
-
+	I_A_VND = linspace(0,1,21)
+	I_E_VND = I_E_VND_amp_array(I_A_VND, a_v, b_v, poly_coeff)
 
 	I_A_CND = linspace(0.1, 1, 19)
 	I_E_CND = np.zeros(I_A_CND.shape)
 	for k in range(len(I_E_CND)):
 		I_E_CND[k] = 1 - exit.I_E_REP(I_A_CND[k], d_c)
 	fig, ax = plt.subplots()
-	plt.plot(I_A_VND[:len(I_E_VND)], I_E_VND, color='k', linestyle='-', label = 'VND')
+	plt.plot(I_A_VND, I_E_VND, color='k', linestyle='-', label = 'VND')
 	plt.plot(I_E_CND, I_A_CND, color='r', linestyle='-', label = 'CND')
 	plt.xlabel('$I_{A,VND}, I_{E,CND}$', fontsize=18) 
 	plt.ylabel('$I_{E,VND}, I_{A,CND}$', fontsize=18)
 	plt.tight_layout()
 	plt.legend()
 	plt.show()
+
+# plot the exit charts for the combined amp and VND and the CND 
+# Both the VND and CND can have variable degree distributions. 
+#def plot_amp_ldpc_exit_varCND(poly_coeff, a_v, )
 
 def plane_intersect(a, b, plot=False):
 	"""
@@ -435,31 +443,33 @@ def plane_intersect(a, b, plot=False):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=256
-	M=32
+	L=512
+	M=512
 	logm = np.log2(M)
 	R_sparc = 1
-	R_ldpc = 5/6
-	d_c=8
-
 	export = True
+	
+	###################################
+	# Plotting the combined EXIT chart for amp and an LDPC with VND of different degrees
+	R_ldpc = 0.5
+	d_c=7
 	# the average value of d_v
 	dv_bar = (1-R_ldpc)*d_c
 	
-	poly_coeff = np.array([ 0.54191334, -0.09699622, -0.37618619, 1.01154714])
+	# This is for M=32 L=256 R_sparc=1 snr=10dB
+	poly_coeff = np.array([0.50076363, 0.14600204, -1.02864634, 1.42392821])
 	# working with an ldpc code where d_v,1=2, d_v,2=4, d_v,3=18
-	d_v1=1
-	d_v2=3
-	d_v3=6
+	d_v1=2
+	d_v2=7
+	d_v3=12
 
-	a_v = np.zeros(10)
+	a_v = np.zeros(30)
 	# have 2 planes which define the values of the a_v
 	a, b = (d_v1, d_v2, d_v3, -dv_bar), (1, 1, 1, -1)
 	# point on line of intersection point and direction of line d
 	point, d = plane_intersect(a, b)
 
-	# find a1 and a2 in terms of a3
-	a_v[d_v3] = 0.05
+	a_v[d_v3] = 0.07
 	A = np.array([[d_v1,d_v2],[1,1]])
 	b = np.array([dv_bar-d_v3*a_v[d_v3], 1-a_v[d_v3]])
 	# solve the simulataneous equations with a3 fixed
@@ -472,6 +482,7 @@ if __name__ == "__main__":
 	a_v = np.round(a_v, 3)
 	print(a_v)
 
+	plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc)
 	'''
 	a1, a2 = np.meshgrid(np.linspace(0,1,2),linspace(0,1,2))
 	a3_1 = 1/d_v3 *(4/3 - d_v1*a1 - d_v2*a2)
@@ -512,13 +523,13 @@ if __name__ == "__main__":
 	
 	'''
 	
-	
 	'''
+	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	bin_number = 125
-	repeats = 150
-	datapoints = 1
-	x_axis_points=30
+	bin_number = 500
+	repeats = 20
+	datapoints = 3
+	x_axis_points=10
 	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -527,7 +538,7 @@ if __name__ == "__main__":
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,x_axis_points))
-	snr_dB = np.linspace(10, 10, datapoints)
+	snr_dB = np.linspace(10, 12, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
@@ -545,7 +556,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.7)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.6)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -567,23 +578,23 @@ if __name__ == "__main__":
 	I_e_accum = I_e_accum/repeats
 	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
 	# for snr=10dB
-	poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
+	#poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
 	# Note that this will give the constant first and the coefficient of I_a**3 last
-	print("The coefficients for the polynomial are: ",poly_coeff)
+	#print("The coefficients for the polynomial are: ",poly_coeff)
 	print("Wall clock time elapsed: ", time.time()-t0)
 
 	fig, ax = plt.subplots()
 	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
-	#ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
-	#ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
 	# plot the polynomial representation of this exit curve 
-	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
-	ones = np.ones((101, 1))
+	#I_A_amp = np.linspace(0,1,101).reshape(-1,1)
+	#ones = np.ones((101, 1))
 	# multiply the polynomial coefficients by the different values of I_A_amp and it's powers
-	I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
-	ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
+	#I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
+	#ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
@@ -592,6 +603,7 @@ if __name__ == "__main__":
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
 	#plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
 	plt.show()
+	
 	'''
 	'''
 	

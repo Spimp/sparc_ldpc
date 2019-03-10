@@ -81,6 +81,7 @@ def sub_fht(n, m, seed=0, ordering=None):
     return Ax, Ay, ordering
 
 def block_sub_fht(n, m, l, seed=0, ordering=None):
+    #print("seed in block_sub_fht is: ", seed)
     """
     As `sub_fht`, but computes in `l` blocks of size `n` by `m`, potentially
     offering substantial speed improvements.
@@ -138,8 +139,9 @@ def block_sub_fht(n, m, l, seed=0, ordering=None):
 
 #SPARC dictionary
 #Returns 2 functions Ab and Az which compute Aβ and A^Tz respectively.
-def sparc_transforms(L, M, n):
-    Ax, Ay, ordering = block_sub_fht(n, M, L, ordering=None)
+def sparc_transforms(L, M, n, seed=0):
+    #print("seed in sparc transforms is: ", seed)
+    Ax, Ay, ordering = block_sub_fht(n, M, L, ordering=None, seed=seed)
     def Ab(b):
         return Ax(b).reshape(-1, 1) / np.sqrt(n)
     def Az(z):
@@ -156,6 +158,7 @@ def sparc_transforms(L, M, n):
 #Takes in the value of ordering so a smaller design matrix can be generated to run on 
 #just the unprotected sections for the second round of amp decoding. 
 def sparc_transforms_shorter(L, M, n, ordering):
+    #print("calling block_sub_fht with an ordering, so doesn't matter what seed is ")
     # just use the first L unprotected rows of ordering
     Ax, Ay, _ = block_sub_fht(n, M, L, ordering=ordering[:L,:])
     def Ab(b):
@@ -352,9 +355,8 @@ def ber_from_LLRs(M, LLR, input_indices, total_bits):
     v_output = (LLR<0.0)
     # convert the bits to indices
     v_indices = bits2indices(v_output, M)
-    # compute BER after ldpc decoding
-    ber_ldpc.append(sum(bin(a^b).count('1') for (a, b) in zip(input_indices, v_indices))/total_bits)
-
+    # compute BER 
+    return sum(bin(a^b).count('1') for (a, b) in zip(input_indices, v_indices))/total_bits
 
 # note removed r_pa from function as never use it
 # a, f, and C control the parameterised power allocation
@@ -764,7 +766,7 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
     #C = 0.5 * np.log2(1 + snr)
     n = int(L*np.log2(M) / r_sparc)
     # compute additional parameters
-    logm = np.log2(M)
+    logm = int(np.log2(M))
     total_bits = int(logm*L)
     
     # Generate the power allocation
@@ -785,23 +787,31 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
     assert nl%logm == 0
     #(L, M, sigma, P, R, T, R_PA, R_LDPC):
 
-    # Generate random message in 2 stages
-    # First generate ldpc bits
-    protected_bits = np.random.randint(0, 2, kl).tolist()
-    assert len(protected_bits) == kl
-    # Encode the protected_bits using the ldpc code 
-    ldpc_bits = ldpc_code.encode(protected_bits).tolist() 
-    # Generate the remaining bits required
-    unprotected_bits = np.random.randint(0, 2, int(total_bits-nl)).tolist()
-    # concatenate the ldpc and unprotected bits      
-    sparc_bits = unprotected_bits+ldpc_bits
-    assert len(sparc_bits)==total_bits
+    if standard=="802.11n" or standard=="802.16":
+        # Generate random message in 2 stages
+        # First generate ldpc bits
+        protected_bits = np.random.randint(0, 2, kl).tolist()
+        assert len(protected_bits) == kl
+        # Encode the protected_bits using the ldpc code 
+        ldpc_bits = ldpc_code.encode(protected_bits).tolist() 
+        # Generate the remaining bits required
+        unprotected_bits = np.random.randint(0, 2, int(total_bits-nl)).tolist()
+        # concatenate the ldpc and unprotected bits      
+        sparc_bits = unprotected_bits+ldpc_bits
+        assert len(sparc_bits)==total_bits
+        # seed for the design matrix A. We want this to be the same everytime
+        seed=0
+    else:
+        # use the all zero codeword for the sparc bits to avoid the need for ldpc encoding.
+        sparc_bits = np.zeros(total_bits)
+        # don't want to set a random seed. This should mean the function seeds off the clock time or similar.
+        seed=None
     # convert the bits to indices for encoding
     sparc_indices = bits2indices(sparc_bits, M)
     assert len(sparc_indices)==L
        
     # Generate the SPARC transform functions A.beta and A'.z
-    Ab, Az, ordering = sparc_transforms(L, M, n)
+    Ab, Az, ordering = sparc_transforms(L, M, n, seed)
     # Generate our transmitted signal X
     β_0 = np.zeros((L*M, 1))
     for l in range(L):
@@ -886,16 +896,16 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
             # convert bitwise post. to LLRs 
             LLR_amp_sections = np.log(1-bitwise)-np.log(bitwise)
             # set -inf and +inf to real numbers with v large magnitude
-            LLR_amp_sections=np.nan_to_num(E_amp_sections)
+            LLR_amp_sections=np.nan_to_num(LLR_amp_sections)
         
             # convert amp_sections to a list of all the positions in these sections
             amp_positions = np.tile(np.linspace(0,logm-1,logm,dtype=np.dtype(np.int16)),L_amp_sections)
             amp_positions = amp_positions + logm*np.repeat(amp_sections, logm)
             # replace the LLRs for the amp_sections with the new LLRs
             LLR[amp_positions] = LLR_amp_sections
-        # use sectionwise_posterior to store the sectionwise posteriors of the sections which aren't protected by the ldpc
-        # Note this will always be the first (L-ldpc_sections)*M columns of sectionwise
-        sectionwise_posterior[:(L-ldpc_sections)*M] = sectionwise[:(L-ldpc_sections)*M]
+            # use sectionwise_posterior to store the sectionwise posteriors of the sections which aren't protected by the ldpc
+            # Note this will always be the first (L-ldpc_sections)*M columns of sectionwise
+            sectionwise_posterior[:(L-ldpc_sections)*M] = sectionwise[:(L-ldpc_sections)*M]
         # calculate the new BER after amp decoding for this new set of LLRs
         ber_amp.append(ber_from_LLRs(M, LLR, sparc_indices, total_bits))
     # overall rate of the code
@@ -906,10 +916,12 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
    
     return ber_amp, ber_ldpc, R
 
+
+
  # Code for simulating the AWGN channel   
 def awgn(x, sigma):
     noise = sigma*np.random.randn(len(x))
-    return np.add(x, noise)
+    return x + noise
 
 def ch2llr(ch, sigma):
     sigma2 = sigma**2
@@ -1244,11 +1256,129 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     plt.legend(loc=1, prop={'size': 7})
     plt.savefig(png_filename)
 
+# code to plot the soft info transfer with hard intialisation curves. I.e plotting soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_iter, threshold)
+def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, soft_iter=3, threshold=0.6):
+    # Sparc parameters
+    L = sparcparams.L
+    M = sparcparams.M
+    logm = np.log2(M)
+    p=sparcparams.p
+    r_sparc = sparcparams.r
+    T = sparcparams.t
+    a = sparcparams.a
+    f = sparcparams.f
+    C = sparcparams.C
+
+    # LDPC parameters
+    standard = ldpcparams.standard
+    r_ldpc = ldpcparams.r_ldpc
+    # covering all sections to give overall rate of 1/3
+    sec = L
+    # number of ldpc bits, must be divisible by 40 (note using my own ldpc codes)
+    nl = logm * sec
+    z = int(nl/40)
+    ldpcparams = LDPCParams(standard, r_ldpc, z)    
+
+    n = L*logm/r_sparc
+    R = (L*logm-nl*(1-1/2))/n
+    # note that R should be 1/2
+    print('Overall rate is: ', R)
+
+    # snr at capacity
+    snrc = (2**(2*R) - 1)
+    EbN0c = 1/(2*R) * snrc
+    EbN0c_dB = 20*log10(EbN0c)
+
+    SIGMA = linspace(0.9, 1.4, datapoints)
+    # BER after each round of AMP decoding
+    BER_amp = np.zeros((datapoints, soft_iter))
+    # BER after each round of ldpc
+    BER_ldpc = np.zeros((datapoints, soft_iter))
+    # BER of plain SPARC
+    BER_plain = np.zeros(datapoints)
+
+    i=0
+    for sigma in SIGMA:
+        # Note that I'm using the same power allocation for both SPARCs, but it is being tailored to the sparc with outer code. 
+        sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T)
+        # plain sparc with same overall rate for comparison
+        sparcparams_plain = SPARCParams(L, M, sigma, p, R, T)
+        # cumulative BER for amp and ldpc
+        ber_cum_amp = np.zeros(soft_iter)
+        ber_cum_ldpc = np.zeros(soft_iter)
+        ber_cum_plain = 0
+        nblockerrors_plain = 0
+        nblocks = 0
+        while nblockerrors_plain < MIN_ERRORS:
+            (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_hardinit(sparcparams, ldpcparams, soft_iter, threshold)
+            #print("ber_thisblock_amp ", ber_thisblock_amp)
+            #print("ber_thisblock_ldpc", ber_thisblock_ldpc)
+            (ber_thisblock_plain, _, _, _) = amp_ldpc_sim(sparcparams_plain)
+            for j in range(soft_iter):
+                ber_cum_amp[j] += ber_thisblock_amp[j]
+                ber_cum_ldpc[j] += ber_thisblock_ldpc[j]
+            ber_cum_plain += ber_thisblock_plain
+            if ber_thisblock_plain:
+                nblockerrors_plain += 1
+            nblocks += 1
+
+            if nblocks >= MAX_BLOCKS:
+                break
+
+        BER_amp[i,:] = ber_cum_amp/nblocks
+        BER_ldpc[i,:] = ber_cum_ldpc/nblocks
+        #print("BER_ldpc ", BER_ldpc)
+        BER_plain[i] = ber_cum_plain/nblocks
+        i+=1
+
+    #snrdB = 20*np.log10(P/sigma**2)
+    EbN0 = 1/(2*R) * (p/SIGMA**2)
+    #print(EbN0)
+    EbN0_dB = 20*log10(EbN0)
+    # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
+    myFile = open(csv_filename, 'a')
+    with myFile:
+        myFields = ['EbN0_dB', 'BER_amp', 'BER_ldpc', 'BER_plain']
+        writer = csv.DictWriter(myFile, fieldnames=myFields)
+        writer.writeheader()
+        for k in range(datapoints):
+            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp': BER_amp[k,:],'BER_ldpc' : BER_ldpc[k,:], 'BER_plain': BER_plain[k]})
+
+    #print("BER_ldpc is: ", BER_ldpc)
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    ax.plot(EbN0_dB, BER_amp[:,0], 'g--', label = 'SPARC w/ outer code: after 1st round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,0], 'g-', label = 'SPARC w/ outer code: after 1st round of LDPC')
+    ax.plot(EbN0_dB, BER_amp[:,1], 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+    if soft_iter>2:
+        ax.plot(EbN0_dB, BER_amp[:,2], 'c--', label = 'SPARC w/ outer code: after 3rd round of AMP')
+        ax.plot(EbN0_dB, BER_ldpc[:,2], 'c-', label = 'SPARC w/ outer code: after 3rd round of LDPC')
+    ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
+
+    plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
+    plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
+    plt.ylabel('BER', fontsize=15)
+    plt.tight_layout()
+    plt.legend(loc=2, prop={'size': 8})
+    plt.savefig(png_filename)
+
 
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
 
+    #####################################
+    # test to see if my new parity check equations work
+    standard = '2_7_12_good'
+    r_ldpc='1/2'
+    z=32
+    ldpcparams = LDPCParams(standard, r_ldpc, z)
+    sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
+
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32.png", datapoints=10, MIN_ERRORS=150, MAX_BLOCKS=150, soft_iter=3, threshold=0.7)
+
+    '''
     ######################################
     # Plot the parameterised power allocation
     datapoints = 5
@@ -1282,7 +1412,7 @@ if __name__ == "__main__":
     plt.legend(loc=6, prop={'size': 7})
     plt.title("The power allocation for a rate 1 SPARC with different SNRs")
     plt.show()
-
+    '''
 
     '''
     #######################################

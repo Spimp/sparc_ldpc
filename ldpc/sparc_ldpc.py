@@ -905,6 +905,7 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
             LLR[amp_positions] = LLR_amp_sections
             # use sectionwise_posterior to store the sectionwise posteriors of the sections which aren't protected by the ldpc
             # Note this will always be the first (L-ldpc_sections)*M columns of sectionwise
+            # actually this is redundant as we just replace these with each loop anyway. 
             sectionwise_posterior[:(L-ldpc_sections)*M] = sectionwise[:(L-ldpc_sections)*M]
         # calculate the new BER after amp decoding for this new set of LLRs
         ber_amp.append(ber_from_LLRs(M, LLR, sparc_indices, total_bits))
@@ -1265,9 +1266,6 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     p=sparcparams.p
     r_sparc = sparcparams.r
     T = sparcparams.t
-    a = sparcparams.a
-    f = sparcparams.f
-    C = sparcparams.C
 
     # LDPC parameters
     standard = ldpcparams.standard
@@ -1284,7 +1282,7 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     # note that R should be 1/2
     print('Overall rate is: ', R)
 
-    # snr at capacity
+    # snr at capacity -> found by inverting the equation C = 1/2*log2(1+snr) where C is the rate here
     snrc = (2**(2*R) - 1)
     EbN0c = 1/(2*R) * snrc
     EbN0c_dB = 20*log10(EbN0c)
@@ -1299,7 +1297,6 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
 
     i=0
     for sigma in SIGMA:
-        # Note that I'm using the same power allocation for both SPARCs, but it is being tailored to the sparc with outer code. 
         sparcparams = SPARCParams(L, M, sigma, p, r_sparc, T)
         # plain sparc with same overall rate for comparison
         sparcparams_plain = SPARCParams(L, M, sigma, p, R, T)
@@ -1347,13 +1344,13 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     #print("BER_ldpc is: ", BER_ldpc)
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
-    ax.plot(EbN0_dB, BER_amp[:,0], 'g--', label = 'SPARC w/ outer code: after 1st round of AMP')
-    ax.plot(EbN0_dB, BER_ldpc[:,0], 'g-', label = 'SPARC w/ outer code: after 1st round of LDPC')
-    ax.plot(EbN0_dB, BER_amp[:,1], 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
-    ax.plot(EbN0_dB, BER_ldpc[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
-    if soft_iter>2:
-        ax.plot(EbN0_dB, BER_amp[:,2], 'c--', label = 'SPARC w/ outer code: after 3rd round of AMP')
-        ax.plot(EbN0_dB, BER_ldpc[:,2], 'c-', label = 'SPARC w/ outer code: after 3rd round of LDPC')
+    # plot the results after the first and last soft iteration
+    ax.plot(EbN0_dB, BER_amp[:,0], 'g--', label = 'SPARC w/ outer code: after 1 round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,0], 'g:', label = 'SPARC w/ outer code: after 1 round of LDPC')
+    #ax.plot(EbN0_dB, BER_amp[:,1], 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    #ax.plot(EbN0_dB, BER_ldpc[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+    ax.plot(EbN0_dB, BER_amp[:,soft_iter-1], 'c--', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'c:', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
 
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
@@ -1376,8 +1373,8 @@ if __name__ == "__main__":
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
 
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32.png", datapoints=10, MIN_ERRORS=150, MAX_BLOCKS=150, soft_iter=3, threshold=0.7)
-
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32_it20.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32_it20.png", datapoints=10, MIN_ERRORS=30, MAX_BLOCKS=30, soft_iter=20, threshold=0.7)
+    print("Wall clock time elapsed: ", time.time()-t0)
     '''
     ######################################
     # Plot the parameterised power allocation

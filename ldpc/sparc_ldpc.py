@@ -880,9 +880,9 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
-        #print("snr is: ", SNR)
-        #print("iteration is: ", i)
-        #print("L_amp_sections: ", L_amp_sections)
+        print("snr is: ", snr)
+        print("iteration is: ", i)
+        print("L_amp_sections: ", L_amp_sections)
 
         # keep the LLRs corresponding to the sections hard decoded before performing amp
         # if there are no amp sections we don't change LLR
@@ -1279,6 +1279,14 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     # LDPC parameters
     standard = ldpcparams.standard
     r_ldpc = ldpcparams.r_ldpc
+    if r_ldpc=='5/6':
+        Rldpc=5/6
+    elif r_ldpc=='1/2':
+        Rldpc=1/2
+    elif r_ldpc=='0.45':
+        Rldpc=0.45
+    else:
+        print("Invalid choice of ldpc rate, please choose a different one.")
     # covering all sections to give overall rate of 1/3
     sec = L
     nl = logm * sec
@@ -1291,8 +1299,8 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     ldpcparams = LDPCParams(standard, r_ldpc, z)    
 
     n = L*logm/r_sparc
-    R = (L*logm-nl*(1-1/2))/n
-    # note that R should be 1/2
+    R = (L*logm-nl*(1-Rldpc))/n
+    # note that R should be r_ldpc
     print('Overall rate is: ', R)
 
     # snr at capacity -> found by inverting the equation C = 1/2*log2(1+snr) where C is the rate here
@@ -1416,21 +1424,23 @@ if __name__ == "__main__":
     '''
     #####################################
     # testing out the soft information exchange with hard initialisation
-    standard = '2_7_12_good'
-    r_ldpc='1/2'
+    standard = '2_5_12_good_threshold08'
+    r_ldpc='0.45'
     z=32
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
 
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test.csv", png_filename="test.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test2.csv", png_filename="test2.png", datapoints=10, MIN_ERRORS=1, MAX_BLOCKS=1, soft_iter=3, threshold=0.8)
     print("Wall clock time elapsed: ", time.time()-t0)
     #csv_filename="shinit_M32L256Rsparc1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.png",
     '''
+    
     #####################################
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
     ldpcparams = LDPCParams('802.16', '5/6', z=None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.9)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
+    
     '''
     ######################################
     # Plot the parameterised power allocation

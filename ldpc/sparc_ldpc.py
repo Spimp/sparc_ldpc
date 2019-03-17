@@ -1439,7 +1439,7 @@ if __name__ == "__main__":
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
     ldpcparams = LDPCParams('802.16', '5/6', z=None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_8.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_8.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
     
     '''
     ######################################

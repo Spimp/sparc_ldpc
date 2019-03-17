@@ -777,12 +777,12 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
     r_ldpc = ldpcparams.r_ldpc
     z = ldpcparams.z
     ptype = ldpcparams.ptype
-    # initialise the ldpc code
+    # initialise the ldpc code\
     ldpc_code = ldpc.code(standard, r_ldpc, z, ptype)
     nl = ldpc_code.N
     kl = ldpc_code.K
 
-    assert nl<=(L*logm)
+    assert nl<=(total_bits)
     # we want the ldpc to cover a complete number of sections and not just part of the final section it covers. 
     assert nl%logm == 0
     #(L, M, sigma, P, R, T, R_PA, R_LDPC):
@@ -880,7 +880,10 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
+        #print("snr is: ", SNR)
+        #print("iteration is: ", i)
         #print("L_amp_sections: ", L_amp_sections)
+
         # keep the LLRs corresponding to the sections hard decoded before performing amp
         # if there are no amp sections we don't change LLR
         if L_amp_sections>0:
@@ -934,6 +937,9 @@ def bpsk(x):
 # the simulation of transmitting over the AWGN channel
 # Change this so it only returns the BER for 1 simulation. 
 # Then I can do the looping else where and plot my own graph
+# NOTE: In previous graphs when I called this equation, I was not calculating the 
+# EbN0 correctly to go with it!! Need to use the fact that E_b=energy per bit=1 in this case
+# N_0/2 = sigma**2 where sigma**2 is the variance of the noise. 
 def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 400000):
     
     rate = ldpcparams.r_ldpc
@@ -962,8 +968,11 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
     nblocks = 0
     nit_total = 0
     while nblockerrors < MIN_ERRORS:
-        u = np.random.randint(0,2,K)
-        x = mycode.encode(u)
+        if standard=="802.11n" or standard=="802.16":
+            u = np.random.randint(0,2,K)
+            x = mycode.encode(u)
+        else:
+            x=np.zeros(N)
         xm = bpsk(x)
 
         y = awgn(xm, sigma)
@@ -1272,9 +1281,13 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     r_ldpc = ldpcparams.r_ldpc
     # covering all sections to give overall rate of 1/3
     sec = L
-    # number of ldpc bits, must be divisible by 40 (note using my own ldpc codes)
     nl = logm * sec
-    z = int(nl/40)
+    if standard=="802.11n" or standard=="802.16":
+        # no. ldpc bits must be divisible by 24 when using one of Jossy's codes
+        z = int(nl/24)
+    else:
+        # number of ldpc bits, must be divisible by 40 when using my own ldpc
+        z = int(nl/40)
     ldpcparams = LDPCParams(standard, r_ldpc, z)    
 
     n = L*logm/r_sparc
@@ -1364,17 +1377,60 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
 if __name__ == "__main__":
     # get the time so you can calculate the wall clock time of the process
     t0 = time.time()
+    '''
+    ######################################
+    # test to see if the LDPC codes I designed are working
+    standard = '2_7_12_bad'
+    #standard = '802.16'
+    r_ldpc='1/2'
+    z=32
+    ldpcparams = LDPCParams(standard, r_ldpc, z)
+    ber = []
+    SIGMA = linspace(0.1, 1, 7)
+    for sigma in SIGMA:
+        ber.append(sim_ldpc(ldpcparams, sigma, MIN_ERRORS = 300, MAX_BLOCKS = 500)) 
 
+    R=1/2
+    # the energy per bit
+    E_b = 1
+    # N_0/2=sigma**2
+    N_0 = 2*(SIGMA**2)
+    EbN0 = E_b/N_0
+    #print(EbN0)
+    EbN0_dB = 20*log10(EbN0)
+    # from equation C=J(sigma_ch)=J(2/sigma_noise) -> by setting C=R, find the sigma_noise that gives this capacity.
+    sigma_capacity = 2/ae.J_inverse(R)
+    N_0_capacity = 2*(sigma_capacity**2)
+    EbN0c = E_b/N_0_capacity
+    EbN0c_dB = 20*log10(EbN0c)
+
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    ax.plot(EbN0_dB, ber)
+    plt.xlabel('$E_b/N_0$ (dB)', fontsize=15)
+    plt.ylabel('BER', fontsize=15)
+    plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
+    print("Wall clock time elapsed: ", time.time()-t0)
+    plt.show()
+    '''
+    '''
     #####################################
-    # test to see if my new parity check equations work
+    # testing out the soft information exchange with hard initialisation
     standard = '2_7_12_good'
     r_ldpc='1/2'
     z=32
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
 
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32_it20.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_Rldpc1_2z_32_it20.png", datapoints=10, MIN_ERRORS=30, MAX_BLOCKS=30, soft_iter=20, threshold=0.7)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test.csv", png_filename="test.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
     print("Wall clock time elapsed: ", time.time()-t0)
+    #csv_filename="shinit_M32L256Rsparc1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.png",
+    '''
+    #####################################
+    # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
+    ldpcparams = LDPCParams('802.16', '5/6', z=None)
+    sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.9)
     '''
     ######################################
     # Plot the parameterised power allocation

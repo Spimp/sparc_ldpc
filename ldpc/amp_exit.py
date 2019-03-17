@@ -443,8 +443,8 @@ def plane_intersect(a, b, plot=False):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=512
-	M=512
+	L=256
+	M=32
 	logm = np.log2(M)
 	R_sparc = 1
 	export = True
@@ -469,7 +469,7 @@ if __name__ == "__main__":
 	# point on line of intersection point and direction of line d
 	point, d = plane_intersect(a, b)
 
-	a_v[d_v3] = 0.07
+	a_v[d_v3] = 0.0
 	A = np.array([[d_v1,d_v2],[1,1]])
 	b = np.array([dv_bar-d_v3*a_v[d_v3], 1-a_v[d_v3]])
 	# solve the simulataneous equations with a3 fixed
@@ -480,9 +480,13 @@ if __name__ == "__main__":
 	a_v[d_v2] = x[1]
 	print(a_v)
 	a_v = np.round(a_v, 3)
+	
+	a_v[d_v1] = 29/40
+	a_v[d_v2] = 11/40
+	a_v[d_v3] = 0/40
 	print(a_v)
-
 	plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc)
+	'''
 	'''
 	a1, a2 = np.meshgrid(np.linspace(0,1,2),linspace(0,1,2))
 	a3_1 = 1/d_v3 *(4/3 - d_v1*a1 - d_v2*a2)
@@ -497,7 +501,7 @@ if __name__ == "__main__":
 	ax.set_zlabel("a3")
 	plt.show()
 	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
-	'''
+	
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
@@ -523,13 +527,13 @@ if __name__ == "__main__":
 	
 	'''
 	
-	'''
 	
+	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	bin_number = 500
-	repeats = 20
-	datapoints = 3
-	x_axis_points=10
+	bin_number = 125
+	repeats = 150
+	datapoints = 1
+	x_axis_points=30
 	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -538,7 +542,7 @@ if __name__ == "__main__":
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,x_axis_points))
-	snr_dB = np.linspace(10, 12, datapoints)
+	snr_dB = np.linspace(10, 10, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
@@ -556,7 +560,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.6)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.8)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -578,23 +582,23 @@ if __name__ == "__main__":
 	I_e_accum = I_e_accum/repeats
 	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
 	# for snr=10dB
-	#poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
+	poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
 	# Note that this will give the constant first and the coefficient of I_a**3 last
-	#print("The coefficients for the polynomial are: ",poly_coeff)
+	print("The coefficients for the polynomial are: ",poly_coeff)
 	print("Wall clock time elapsed: ", time.time()-t0)
 
 	fig, ax = plt.subplots()
 	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
-	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
 	# plot the polynomial representation of this exit curve 
-	#I_A_amp = np.linspace(0,1,101).reshape(-1,1)
-	#ones = np.ones((101, 1))
+	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
+	ones = np.ones((101, 1))
 	# multiply the polynomial coefficients by the different values of I_A_amp and it's powers
-	#I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
-	#ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
+	I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
+	ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
 	
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
@@ -603,8 +607,8 @@ if __name__ == "__main__":
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
 	#plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
 	plt.show()
-	
 	'''
+	
 	'''
 	
 	#############################

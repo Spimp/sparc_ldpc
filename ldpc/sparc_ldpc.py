@@ -880,9 +880,9 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
-        print("snr is: ", snr)
-        print("iteration is: ", i)
-        print("L_amp_sections: ", L_amp_sections)
+        #print("snr is: ", snr)
+        #print("iteration is: ", i)
+        #print("L_amp_sections: ", L_amp_sections)
 
         # keep the LLRs corresponding to the sections hard decoded before performing amp
         # if there are no amp sections we don't change LLR

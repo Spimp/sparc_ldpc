@@ -880,7 +880,7 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
-        #print("snr is: ", snr)
+        #print("snr in dB is: ", 20*np.log10(snr))
         #print("iteration is: ", i)
         #print("L_amp_sections: ", L_amp_sections)
 
@@ -955,6 +955,8 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
         R = 0.75
     elif rate == "5/6":
         R = 0.83333
+    elif rate=="0.45":
+        R=0.45
     else:
         raise NameError("Rate unsupported")
 
@@ -1388,9 +1390,10 @@ if __name__ == "__main__":
     '''
     ######################################
     # test to see if the LDPC codes I designed are working
-    standard = '2_7_12_bad'
+    standard = '2_5_12_good_threshold08'
     #standard = '802.16'
-    r_ldpc='1/2'
+    r_ldpc='0.45'
+    R=0.45
     z=32
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     ber = []
@@ -1398,7 +1401,6 @@ if __name__ == "__main__":
     for sigma in SIGMA:
         ber.append(sim_ldpc(ldpcparams, sigma, MIN_ERRORS = 300, MAX_BLOCKS = 500)) 
 
-    R=1/2
     # the energy per bit
     E_b = 1
     # N_0/2=sigma**2
@@ -1430,16 +1432,17 @@ if __name__ == "__main__":
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
 
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test2.csv", png_filename="test2.png", datapoints=10, MIN_ERRORS=1, MAX_BLOCKS=1, soft_iter=3, threshold=0.8)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test25.csv", png_filename="test25.png", datapoints=10, MIN_ERRORS=10, MAX_BLOCKS=10, soft_iter=25, threshold=0.8)
     print("Wall clock time elapsed: ", time.time()-t0)
     #csv_filename="shinit_M32L256Rsparc1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.png",
     '''
+    
     
     #####################################
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
     ldpcparams = LDPCParams('802.16', '5/6', z=None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_8.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_8.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=100, soft_iter=2, threshold=0.8)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=150, soft_iter=2, threshold=0.6)
     
     '''
     ######################################

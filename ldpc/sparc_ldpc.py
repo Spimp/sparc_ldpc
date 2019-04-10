@@ -8,6 +8,7 @@ import csv
 from bitarray import bitarray
 import amp_exit as ae
 
+
 # Code taken from Adam's python tutorial. 
 # I have removed the power allocation code as I'm using a uniform power allocation
 # Can get this from the notebook if I decide I need this. 
@@ -740,6 +741,170 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
    
     return ber_amp, ber_ldpc, R
 
+# simulation of sparc code with outer amp code with hard information exchange 
+# between the amp decoder and the ldpc decoder
+# The output from the LDPC decoder will be hard decoded to give a beta vector
+# This hard decoded beta vector will be used as the initialisation of beta_0 
+# in the amp decoder. The decoding will end after the second round of amp decoding. 
+# in this function '_ldpc' means after ldpc decoding and '_amp' means after amp decoding
+def hardinitbeta_amp_ldpc_sim(sparcparams, ldpcparams):
+    # arrays to store the return values of the ber
+    # bit error rate after each round of amp decoding
+    ber_amp = []
+    # ber after each round of ldpc decoding
+    ber_ldpc = []
+
+    #Get the SPARC parameters from the struct
+    L = sparcparams.L
+    M = sparcparams.M
+    P = sparcparams.p
+    sigma = sparcparams.sigma
+    r_sparc = sparcparams.r
+    #r_pa_sparc = sparcparams.r_pa
+    T = sparcparams.t
+
+    # calculate some additional parameters 
+    # Compute the SNR, capacity, and n, from the input parameters
+    snr = P / sigma**2
+    #C = 0.5 * np.log2(1 + snr)
+    n = int(L*np.log2(M) / r_sparc)
+    # compute additional parameters
+    logm = np.log2(M)
+    total_bits = int(logm*L)
+    
+    # Generate the power allocation
+    # uniform power allocation across sections
+    Pl = P/L * np.ones(L)
+
+    standard = ldpcparams.standard
+    r_ldpc = ldpcparams.r_ldpc
+    z = ldpcparams.z
+    ptype = ldpcparams.ptype
+    # initialise the ldpc code
+    ldpc_code = ldpc.code(standard, r_ldpc, z, ptype)
+    nl = ldpc_code.N
+    kl = ldpc_code.K
+
+    assert nl<=(L*logm)
+    # we want the ldpc to cover a complete number of sections and not just part of the final section it covers. 
+    assert nl%logm == 0
+    #(L, M, sigma, P, R, T, R_PA, R_LDPC):
+
+    # Generate random message in 2 stages
+    # First generate ldpc bits
+    protected_bits = np.random.randint(0, 2, kl).tolist()
+    assert len(protected_bits) == kl
+
+    # Encode the protected_bits using the ldpc code 
+    ldpc_bits = ldpc_code.encode(protected_bits).tolist() 
+
+    # Generate the remaining bits required
+    unprotected_bits = np.random.randint(0, 2, int(total_bits-nl)).tolist()
+
+    # concatenate the ldpc and unprotected bits      
+    sparc_bits = unprotected_bits+ldpc_bits
+
+    assert len(sparc_bits)==total_bits
+
+    # convert the bits to indices for encoding
+    sparc_indices = bits2indices(sparc_bits, M)
+
+    assert len(sparc_indices)==L
+       
+    # Generate the SPARC transform functions A.beta and A'.z
+    Ab, Az, ordering = sparc_transforms(L, M, n)
+    
+    # Generate our transmitted signal X
+    β_0 = np.zeros((L*M, 1))
+    for l in range(L):
+        β_0[l*M + sparc_indices[l]] = np.sqrt(n * Pl[l])
+    x = Ab(β_0)
+    
+    # check that the power has been allocated uniformly. This should be approx equal to one when divided by the snr. 
+    #print("Average power/snr is ", np.mean(x**2)/snr)
+
+    # Generate random channel noise and then received signal y
+    z = np.random.randn(n, 1) * sigma
+    y = (x + z).reshape(-1, 1)
+    
+    # Run AMP decoding
+    β = amp(y, sigma, Pl, L, M, T, Ab, Az).reshape(-1)
+    # Output the results of just AMP decoding
+    
+    # Convert decoded beta back to a message
+    rx_message = []
+    for l in range(L):
+        idx = np.argmax(β[l*M:(l+1)*M])
+        rx_message.append(idx)
+    
+    # Compute fraction of sections decoded correctly with just AMP decoding
+    #correct_amp = np.sum(np.array(rx_message) == np.array(sparc_indices)) / L
+    #print("Fraction of sections decoded correctly with amp: ", correct_amp)
+    
+    # Compute BER for just sparc
+    ber_amp.append(sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message))/total_bits)
+
+    beta_amp = β
+    rx_message_amp = rx_message
+
+    # Get the sectionwise posterior probabilities by dividing β by the power in each section. 
+    # This converts each section in β to a valid probability distribution.
+    sectionwise_posterior = beta_amp/np.sqrt(n*np.repeat(Pl, M))
+
+    #print('sectionwise posterior sum ', sum(sectionwise_posterior))
+
+    # remember only want to perform ldpc decoding on sections covered by the ldpc code
+    ldpc_sections = int(nl/logm)
+    # convert sectionwise to bitwise posterior probabilities
+    # only need the sections corresponding to the ldpc code 
+    bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], ldpc_sections, M) 
+
+    #np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
+    # computer the log likelihood ratio for decoding
+    LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
+    # set -inf and +inf to real numbers with v large magnitude
+    LLR = np.nan_to_num(LLR)
+
+    (app, it) = ldpc_code.decode(LLR)
+
+    # get hard decision on bits after ldpc
+    v_output = (app<0.0)
+    
+    # convert the bits to indices
+    v_indices = bits2indices(v_output, M)
+
+    # replace old indices for ldpc sections with new ones
+    ldpc_indices = rx_message_amp
+    ldpc_indices[L-ldpc_sections:] = v_indices
+
+    # compute BER after ldpc decoding
+    ber_ldpc.append(sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, ldpc_indices))/total_bits)
+
+    # use the hard decoded indices to produce a hard decoded beta from the LDPC decoding
+    beta_ldpc = np.zeros((L*M,1))
+    for l in range(L):
+        # this will set one position in each section to the appropriate power allocation.
+        beta_ldpc[l*M + ldpc_indices[l]] = np.sqrt(n * Pl[l])
+
+    # Run AMP decoding with the original channel output and this new intialisation for beta_0
+    beta_amp = amp(y, sigma, Pl, L, M, T, Ab, Az, beta_ldpc).reshape(-1)
+
+    # Convert decoded beta_amp back to a message 
+    rx_message_amp = []
+    for l in range(L):
+        idx = np.argmax(beta_amp[l*M:(l+1)*M])
+        rx_message_amp.append(idx)
+
+    ber_amp.append(sum(bin(a^b).count('1') for (a, b) in zip(sparc_indices, rx_message_amp))/total_bits) 
+
+    # overall rate of the code
+    R = (L*logm - (nl-kl))/n
+
+    #Compute Eb/N0
+    #EbN0 = 1/(2*R) * (P/sigma**2)
+   
+    return ber_amp, ber_ldpc, R
+
 # Function to calculate the BER for the soft information exchange but with a hard intialisation approach
 # threshold is used in the hard initialisation. If an ldpc section has a probability greater than the threshold
 # it is hard decoded and it's contribution removed from the channel output. It then retains it's LLR 
@@ -880,9 +1045,10 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # Will then only perform amp decoding on sections which don't have an entry in their section with probability exceeding the threshold. 
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
-        #print("snr in dB is: ", 20*np.log10(snr))
-        #print("iteration is: ", i)
-        #print("L_amp_sections: ", L_amp_sections)
+        # NOTE HARD CODED IN THE RATE FOR SPEED
+        print("EbN0 in dB is: ", 20*np.log10(snr/(2*0.5)))
+        print("iteration is: ", i)
+        print("L_amp_sections: ", L_amp_sections)
 
         # keep the LLRs corresponding to the sections hard decoded before performing amp
         # if there are no amp sections we don't change LLR
@@ -999,7 +1165,11 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
     return ber
 
 # code to plot a waterfall curve for an ldpc code with a bpsk modulation scheme and sparc with an outer ldpc code
-def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
+# init decides whether waterfall calls soft_amp_ldpc_sim() or hardinitbeta_amp_ldpc_sim(). 
+# both work by initialising beta_0 with the output from the ldpc decoder but one uses 
+# a soft initialisation and one a hard. 
+# have corrected this so now plotting EbN0 for bpsk correctly. - at least I think. Worth another check
+def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
 
     # Sparc parameters
     L = sparcparams.L
@@ -1033,7 +1203,7 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     EbN0c = 1/(2*R) * snrc
     EbN0c_dB = 20*log10(EbN0c)
 
-    SIGMA = linspace(0.8, 0.4, datapoints)
+    SIGMA = linspace(1.0, 0.4, datapoints)
     # BER after first round of AMP decoding
     BER_amp_1 = np.zeros(datapoints)
     # BER after second round of AMP decoding
@@ -1068,7 +1238,14 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
         nblockerrors_ldpc = 0
         nblocks = 0
         while nblockerrors_ldpc < MIN_ERRORS:
-            (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_sim(sparcparams, ldpcparams, 2)
+            if init=='soft':
+                (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_sim(sparcparams, ldpcparams, 2)
+            elif init=='hard':
+                (ber_thisblock_amp, ber_thisblock_ldpc, _) = hardinitbeta_amp_ldpc_sim(sparcparams, ldpcparams)
+                # append a zero so that the calculations for the soft init don't fail.
+                ber_thisblock_ldpc.append(0)
+            else:
+                print(init, " is not a valid initialisation. Please change to \'soft\' or \'hard\'")
             (ber_thisblock_plain, _, _, _) = amp_ldpc_sim(sparcparams_plain)
             #print("BER amp:", ber_thisblock_amp)
             #print("BER ldpc: ", ber_thisblock_ldpc)
@@ -1093,29 +1270,36 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
 
 
         i+=1
-
+    # EbN0 for the sparc based methods
     #snrdB = 20*np.log10(P/sigma**2)
     EbN0 = 1/(2*R) * (p/SIGMA**2)
     #print(EbN0)
     EbN0_dB = 20*log10(EbN0)
+    # EbN0 for the bpsk results
+    # to calculate this we use use the fact that E_b=energy per bit=1 in this case
+    # N_0/2 = sigma**2 where sigma**2 is the variance of the noise. 
+    E_b = 1
+    N_0 = 2*(SIGMA**2)
+    EbN0_bpsk_dB = 20*log10(E_b/N_0)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
-        myFields = ['EbN0_dB', 'BER_amp_1', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'BER_bpsk']
+        myFields = ['EbN0_dB', 'BER_amp_1', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'EbN0_bpsk_dB', 'BER_bpsk']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
         for k in range(datapoints):
-            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp_1': BER_amp_1[k],'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'BER_bpsk': BER_bpsk[k]})
+            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp_1': BER_amp_1[k],'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'EbN0_bpsk_dB': EbN0_bpsk_dB[k],'BER_bpsk': BER_bpsk[k]})
 
     print("BER_ldpc is: ", BER_ldpc)
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
     ax.plot(EbN0_dB, BER_amp_1, 'm--.', label = 'SPARC w/ outer code: after 1st round of AMP')
-    ax.plot(EbN0_dB, BER_ldpc, 'm-', label = 'SPARC w/ outer code: after 1st round of LDPC')
-    ax.plot(EbN0_dB, BER_amp_2, 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
-    ax.plot(EbN0_dB, BER_ldpc_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+    ax.plot(EbN0_dB, BER_ldpc, 'm--', label = 'SPARC w/ outer code: after 1st round of LDPC')
+    ax.plot(EbN0_dB, BER_amp_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    if init=='soft':
+        ax.plot(EbN0_dB, BER_ldpc_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
-    ax.plot(EbN0_dB, BER_bpsk, 'g-', label = 'LDPC with BPSK modulation')
+    ax.plot(EbN0_bpsk_dB, BER_bpsk, 'g-', label = 'LDPC with BPSK modulation')
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
     plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
     plt.ylabel('BER', fontsize=15)
@@ -1281,23 +1465,28 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     # LDPC parameters
     standard = ldpcparams.standard
     r_ldpc = ldpcparams.r_ldpc
+    z = ldpcparams.z
     if r_ldpc=='5/6':
         Rldpc=5/6
     elif r_ldpc=='1/2':
         Rldpc=1/2
     elif r_ldpc=='0.45':
         Rldpc=0.45
+    elif r_ldpc=='3/8':
+        Rldpc=3/8   
     else:
         print("Invalid choice of ldpc rate, please choose a different one.")
     # covering all sections to give overall rate of 1/3
     sec = L
     nl = logm * sec
-    if standard=="802.11n" or standard=="802.16":
-        # no. ldpc bits must be divisible by 24 when using one of Jossy's codes
-        z = int(nl/24)
-    else:
-        # number of ldpc bits, must be divisible by 40 when using my own ldpc
-        z = int(nl/40)
+    # if I've set z externally, don't bother with this
+    if z==None:
+        if standard=="802.11n" or standard=="802.16":
+            # no. ldpc bits must be divisible by 24 when using one of Jossy's codes
+            z = int(nl/24)
+        else:
+            # number of ldpc bits, must be divisible by 40 when using my own ldpc
+            z = int(nl/40)
     ldpcparams = LDPCParams(standard, r_ldpc, z)    
 
     n = L*logm/r_sparc
@@ -1426,24 +1615,24 @@ if __name__ == "__main__":
     '''
     #####################################
     # testing out the soft information exchange with hard initialisation
-    standard = '2_5_12_good_threshold08'
-    r_ldpc='0.45'
+    standard = '2_7_12_good'
+    r_ldpc='1/2'
     z=32
     ldpcparams = LDPCParams(standard, r_ldpc, z)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
 
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="test25.csv", png_filename="test25.png", datapoints=10, MIN_ERRORS=10, MAX_BLOCKS=10, soft_iter=25, threshold=0.8)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="testing.csv", png_filename="testing.png", datapoints=10, MIN_ERRORS=1, MAX_BLOCKS=1, soft_iter=2, threshold=0.7)
     print("Wall clock time elapsed: ", time.time()-t0)
     #csv_filename="shinit_M32L256Rsparc1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.png",
     '''
     
-    
+    '''
     #####################################
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
     ldpcparams = LDPCParams('802.16', '5/6', z=None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
     soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=150, soft_iter=2, threshold=0.6)
-    
+    '''
     '''
     ######################################
     # Plot the parameterised power allocation
@@ -1534,7 +1723,7 @@ if __name__ == "__main__":
     
     
     '''
-    '''
+    
     ##########################################
     # Plot waterfall curves
     # Compare ldpc with bpsk of rate 5/6 to a sparc with sparc rate 1 and ldpc rate 5/6 with all sections covered
@@ -1543,10 +1732,10 @@ if __name__ == "__main__":
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=2.5, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, pa_param=True, datapoints=15, MIN_ERRORS=1, MAX_BLOCKS=1, csv_filename='EbN0_dBVsBER_waterfall_rep200_pa1.csv', png_filename='EbN0_dBVsBER_waterfall_rep200_pa1.png')
+    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=15, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p2_5r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p2_5r1rldpc5_6.png')
 
     print("Wall clock time elapsed: ", time.time()-t0)
-    '''
+    
     '''
     #########################################
     # Plot hard and soft loops

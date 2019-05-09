@@ -481,9 +481,11 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None, a=None
         # only need the sections corresponding to ldpc code 
         bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], ldpc_sections, M) 
 
-        np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
+        #np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
         # computer the log likelihood ratio for decoding
         LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
+        # set -inf and +inf to real numbers with v large magnitude
+        LLR = np.nan_to_num(LLR)
 
         (app, it) = ldpc_code.decode(LLR)
 
@@ -500,6 +502,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None, a=None
         #### Compute performance with just amp and then ldpc
         beta_output = rx_message
         beta_output[L-ldpc_sections:] = beta_output_ldpc
+
         # compute fraction of sections decoded correctly with AMP followed by SPARC decoding
         #correct_ldpc = np.sum(np.array(beta_output) == np.array(sparc_indices))/L
         #print("Fractions of sections decoded correctly with amp and ldpc: ", correct_ldpc)
@@ -561,6 +564,7 @@ def amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams = None, a=None
 
 # simulation of sparc code with outer amp code with soft information exchange 
 # between the amp decoder and the ldpc decoder
+# soft output from LDPC used to initialise beta_0 in the amp decoding.
 # soft_iter The number of iterations of soft information exchange
 # in this function '_ldpc' means after ldpc decoding and '_amp' means after amp decoding
 # a, f, and C control the parameterised power allocation
@@ -684,9 +688,11 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
         # only need the sections corresponding to ldpc code 
         bitwise_posterior = sp2bp(sectionwise_posterior[(L-ldpc_sections)*M:], ldpc_sections, M) 
 
-        np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
+        #np.clip(bitwise_posterior, 0.001, 1-0.001, out=bitwise_posterior)
         # computer the log likelihood ratio for decoding
         LLR = np.log(1-bitwise_posterior)- np.log(bitwise_posterior)
+        # set -inf and +inf to real numbers with v large magnitude
+        LLR = np.nan_to_num(LLR)
 
         (app, it) = ldpc_code.decode(LLR)
 
@@ -716,7 +722,7 @@ def soft_amp_ldpc_sim(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_ite
         #print("sum sectionwise_ldpc ", sum(sectionwise_ldpc))
 
         # multiply by the power allocation
-        beta_ldpc = sectionwise_ldpc * np.sqrt(n*np.repeat(Pl[(L-ldpc_sections):], M))
+        beta_ldpc = sectionwise_ldpc * np.sqrt(n*np.repeat(Pl, M))
 
         # pass this through the sparc transform to give a new channel input for this approximation of beta
         # Note Ab is just created based on size so don't need to regenerate for this new input
@@ -1046,7 +1052,7 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
         # NOTE HARD CODED IN THE RATE FOR SPEED
-        print("EbN0 in dB is: ", 20*np.log10(snr/(2*0.5)))
+        print("EbN0 in dB is (with hard coded rate): ", 20*np.log10(snr/(2*0.5)))
         print("iteration is: ", i)
         print("L_amp_sections: ", L_amp_sections)
 
@@ -1169,7 +1175,10 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
 # both work by initialising beta_0 with the output from the ldpc decoder but one uses 
 # a soft initialisation and one a hard. 
 # have corrected this so now plotting EbN0 for bpsk correctly. - at least I think. Worth another check
-def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500):
+# note this fn is HARD CODED to work with rate 5/6 ldpc. 
+# I've changed code so that bpsk and sparc should have the same EbN0 through out. 
+# (i.e. the relevant sigma is calculated from EbN0_dB)
+def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, bpsk=True):
 
     # Sparc parameters
     L = sparcparams.L
@@ -1194,6 +1203,7 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     ldpcparams = LDPCParams(standard, r_ldpc, z)    
 
     n = L*logm/r_sparc
+    # HARD CODED RATE 5/6
     R = (L*logm-nl*(1-5/6))/n
     # note that R should be 5/6
     print('Overall rate is: ', R)
@@ -1203,7 +1213,7 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     EbN0c = 1/(2*R) * snrc
     EbN0c_dB = 20*log10(EbN0c)
 
-    SIGMA = linspace(1.0, 0.4, datapoints)
+    EbN0_dB = linspace(3, 10, datapoints)
     # BER after first round of AMP decoding
     BER_amp_1 = np.zeros(datapoints)
     # BER after second round of AMP decoding
@@ -1217,10 +1227,24 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     BER_plain = np.zeros(datapoints)
 
     i=0
-    for sigma in SIGMA:
-        # get the BER for the ldpc and bpsk modulation. The repeats are built into the code
-        BER_bpsk[i] = sim_ldpc(ldpcparams, sigma, MIN_ERRORS, MAX_BLOCKS)
+    for ebno_db in EbN0_dB:
+        ebno = 10**(ebno_db/20)
+        if bpsk==True:
+            # sigma for the bpsk results
+            # to calculate this we use use the fact that E_b=energy per bit=1 in this case
+            # N_0/2 = sigma**2 where sigma**2 is the variance of the noise. 
+            E_b = 1
+            N_0 = E_b/ebno
+            sigma_bpsk = np.sqrt(N_0/2)
+            # get the BER for the ldpc and bpsk modulation. The repeats are built into the code
+            BER_bpsk[i] = sim_ldpc(ldpcparams, sigma_bpsk, MIN_ERRORS, MAX_BLOCKS)
 
+        # sigma for the sparc based methods
+        #snrdB = 20*np.log10(P/sigma**2)
+        #EbN0 = 1/(2*R) * (p/SIGMA**2)
+        #EbN0_dB = 20*log10(EbN0)
+        snr = ebno/(1/(2*R))
+        sigma = np.sqrt(p/snr)
         C = 0.5*np.log2(1+p/(sigma**2))
         if pa_param==True and a==None:
             a=r_sparc/C
@@ -1270,25 +1294,16 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
 
 
         i+=1
-    # EbN0 for the sparc based methods
-    #snrdB = 20*np.log10(P/sigma**2)
-    EbN0 = 1/(2*R) * (p/SIGMA**2)
-    #print(EbN0)
-    EbN0_dB = 20*log10(EbN0)
-    # EbN0 for the bpsk results
-    # to calculate this we use use the fact that E_b=energy per bit=1 in this case
-    # N_0/2 = sigma**2 where sigma**2 is the variance of the noise. 
-    E_b = 1
-    N_0 = 2*(SIGMA**2)
-    EbN0_bpsk_dB = 20*log10(E_b/N_0)
+    
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
-        myFields = ['EbN0_dB', 'BER_amp_1', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'EbN0_bpsk_dB', 'BER_bpsk']
+        # if bpsk False, will just have all zeros for BER_bpsk
+        myFields = ['EbN0_dB', 'BER_amp_1', 'BER_ldpc', 'BER_amp_2', 'BER_ldpc_2', 'BER_plain', 'BER_bpsk']
         writer = csv.DictWriter(myFile, fieldnames=myFields)
         writer.writeheader()
         for k in range(datapoints):
-            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp_1': BER_amp_1[k],'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'EbN0_bpsk_dB': EbN0_bpsk_dB[k],'BER_bpsk': BER_bpsk[k]})
+            writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp_1': BER_amp_1[k],'BER_ldpc' : BER_ldpc[k], 'BER_amp_2': BER_amp_2[k], 'BER_ldpc_2': BER_ldpc_2[k], 'BER_plain': BER_plain[k], 'BER_bpsk': BER_bpsk[k]})
 
     print("BER_ldpc is: ", BER_ldpc)
     fig, ax = plt.subplots()
@@ -1297,14 +1312,15 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     ax.plot(EbN0_dB, BER_ldpc, 'm--', label = 'SPARC w/ outer code: after 1st round of LDPC')
     ax.plot(EbN0_dB, BER_amp_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of AMP')
     if init=='soft':
-        ax.plot(EbN0_dB, BER_ldpc_2, 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+        ax.plot(EbN0_dB, BER_ldpc_2, 'k--', label = 'SPARC w/ outer code: after 2nd round of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
-    ax.plot(EbN0_bpsk_dB, BER_bpsk, 'g-', label = 'LDPC with BPSK modulation')
+    if bpsk==True:
+        ax.plot(EbN0_dB, BER_bpsk, 'g-', label = 'LDPC with BPSK modulation')
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
     plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
     plt.ylabel('BER', fontsize=15)
     plt.tight_layout()
-    plt.legend(loc=1, prop={'size': 8})
+    plt.legend(loc=1, prop={'size': 7})
     plt.savefig(png_filename)
 
 
@@ -1731,8 +1747,8 @@ if __name__ == "__main__":
     # And SPARC with no outer code and overall rate 5/6
     # Note that z is set within the waterfall function so just set as None here
     ldpcparams = LDPCParams('802.16', '5/6', None)
-    sparcparams = SPARCParams(L=512, M=512, sigma=None, p=2.5, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=15, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p2_5r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p2_5r1rldpc5_6.png')
+    sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
+    waterfall(sparcparams, ldpcparams, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.pdf')
 
     print("Wall clock time elapsed: ", time.time()-t0)
     

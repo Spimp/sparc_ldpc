@@ -1179,8 +1179,9 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
 # I've changed code so that bpsk and sparc should have the same EbN0 through out. 
 # (i.e. the relevant sigma is calculated from EbN0_dB)
 # sections - the section coverage of the code. Should only be used with originalHard
+# set as 512 as default as it is assumed that L=512 will be used.
 # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
-def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, bpsk=True, sections=L):
+def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, bpsk=True, sections=512):
 
     # Sparc parameters
     L = sparcparams.L
@@ -1754,7 +1755,7 @@ if __name__ == "__main__":
     #sections = 384 
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.pdf')
+    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.pdf')
 
     print("Wall clock time elapsed: ", time.time()-t0)
     

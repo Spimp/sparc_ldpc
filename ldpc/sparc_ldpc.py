@@ -1178,7 +1178,9 @@ def sim_ldpc(ldpcparams: LDPCParams, sigma, MIN_ERRORS = 100, MAX_BLOCKS = 40000
 # note this fn is HARD CODED to work with rate 5/6 ldpc. 
 # I've changed code so that bpsk and sparc should have the same EbN0 through out. 
 # (i.e. the relevant sigma is calculated from EbN0_dB)
-def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, bpsk=True):
+# sections - the section coverage of the code. Should only be used with originalHard
+# number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
+def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, bpsk=True, sections=L):
 
     # Sparc parameters
     L = sparcparams.L
@@ -1195,10 +1197,8 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     standard = ldpcparams.standard
     r_ldpc = ldpcparams.r_ldpc
     # number of ldpc sections, must be divisible by 8 to ensure nl is divisible by 24.
-    # covering all sections to give overall rate of 5/6
-    sec = L
     # number of ldpc bits, must be divisible by 24
-    nl = logm * sec
+    nl = logm * sections
     z = int(nl/24)
     ldpcparams = LDPCParams(standard, r_ldpc, z)    
 
@@ -1266,6 +1266,10 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
                 (ber_thisblock_amp, ber_thisblock_ldpc, _) = soft_amp_ldpc_sim(sparcparams, ldpcparams, 2)
             elif init=='hard':
                 (ber_thisblock_amp, ber_thisblock_ldpc, _) = hardinitbeta_amp_ldpc_sim(sparcparams, ldpcparams)
+                # append a zero so that the calculations for the soft init don't fail.
+                ber_thisblock_ldpc.append(0)
+            elif init=='originalHard':
+                (ber_thisblock_amp[0], ber_thisblock_ldpc, ber_thisblock_amp[1], _) = amp_ldpc_sim(sparcparams, ldpcparams)
                 # append a zero so that the calculations for the soft init don't fail.
                 ber_thisblock_ldpc.append(0)
             else:
@@ -1746,9 +1750,11 @@ if __name__ == "__main__":
     # to give a overall rate of 5/6
     # And SPARC with no outer code and overall rate 5/6
     # Note that z is set within the waterfall function so just set as None here
+    # sections for use with originalHard.
+    #sections = 384 
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, init='soft', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.pdf')
+    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallsoft_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.pdf')
 
     print("Wall clock time elapsed: ", time.time()-t0)
     

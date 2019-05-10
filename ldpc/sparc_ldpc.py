@@ -1270,9 +1270,10 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
                 # append a zero so that the calculations for the soft init don't fail.
                 ber_thisblock_ldpc.append(0)
             elif init=='originalHard':
-                (ber_thisblock_amp[0], ber_thisblock_ldpc, ber_thisblock_amp[1], _) = amp_ldpc_sim(sparcparams, ldpcparams)
-                # append a zero so that the calculations for the soft init don't fail.
-                ber_thisblock_ldpc.append(0)
+                ber_thisblock_amp = np.zeros(2)
+                # have zero in position 1 so calculations for the soft init don't fail
+                ber_thisblock_ldpc = np.zeros(2)
+                (ber_thisblock_amp[0], ber_thisblock_ldpc[0], ber_thisblock_amp[1], _) = amp_ldpc_sim(sparcparams, ldpcparams)      
             else:
                 print(init, " is not a valid initialisation. Please change to \'soft\' or \'hard\'")
             (ber_thisblock_plain, _, _, _) = amp_ldpc_sim(sparcparams_plain)
@@ -1578,12 +1579,12 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
     # plot the results after the first and last soft iteration
-    ax.plot(EbN0_dB, BER_amp[:,0], 'g--', label = 'SPARC w/ outer code: after 1 round of AMP')
-    ax.plot(EbN0_dB, BER_ldpc[:,0], 'g:', label = 'SPARC w/ outer code: after 1 round of LDPC')
+    ax.plot(EbN0_dB, BER_amp[:,0], 'm--.', label = 'SPARC w/ outer code: after 1 round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,0], 'm--', label = 'SPARC w/ outer code: after 1 round of LDPC')
     #ax.plot(EbN0_dB, BER_amp[:,1], 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
     #ax.plot(EbN0_dB, BER_ldpc[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
-    ax.plot(EbN0_dB, BER_amp[:,soft_iter-1], 'c--', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of AMP')
-    ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'c:', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
+    ax.plot(EbN0_dB, BER_amp[:,soft_iter-1], 'k-', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'k--', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
 
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
@@ -1752,10 +1753,10 @@ if __name__ == "__main__":
     # And SPARC with no outer code and overall rate 5/6
     # Note that z is set within the waterfall function so just set as None here
     # sections for use with originalHard.
-    #sections = 384 
+    sections = 384 
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, init='hard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallhard_rep200_LM512p4r1rldpc5_6.pdf')
+    waterfall(sparcparams, ldpcparams, init='originalHard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.pdf', sections=sections)
 
     print("Wall clock time elapsed: ", time.time()-t0)
     

@@ -1052,9 +1052,9 @@ def soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, sof
         # All sections not covered by the ldpc code will always be involved in the amp decoding. 
         y_new, Ab_new, Az_new, amp_sections, L_amp_sections = ae.hard_initialisation(sectionwise_ldpc, L, M, n, ordering, y, Pl, Ab, threshold, ldpc_sections)
         # NOTE HARD CODED IN THE RATE FOR SPEED
-        print("EbN0 in dB is (with hard coded rate): ", 20*np.log10(snr/(2*0.5)))
-        print("iteration is: ", i)
-        print("L_amp_sections: ", L_amp_sections)
+        #print("EbN0 in dB is (with hard coded rate): ", 20*np.log10(snr/(2*0.5)))
+        #print("iteration is: ", i)
+        #print("L_amp_sections: ", L_amp_sections)
 
         # keep the LLRs corresponding to the sections hard decoded before performing amp
         # if there are no amp sections we don't change LLR
@@ -1475,7 +1475,9 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     plt.savefig(png_filename)
 
 # code to plot the soft info transfer with hard intialisation curves. I.e plotting soft_amp_ldpc_hardinit(sparcparams: SPARCParams, ldpcparams: LDPCParams, soft_iter, threshold)
-def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, soft_iter=3, threshold=0.6):
+# sections determines how many sections are covered. Must ensure it's compatible with z
+# for standard 802.16, sections must be divisible by 8. This will be different for different ldpc codes.
+def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: str, png_filename: str, sections, datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=500, soft_iter=3, threshold=0.6):
     # Sparc parameters
     L = sparcparams.L
     M = sparcparams.M
@@ -1498,9 +1500,8 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
         Rldpc=3/8   
     else:
         print("Invalid choice of ldpc rate, please choose a different one.")
-    # covering all sections to give overall rate of 1/3
-    sec = L
-    nl = logm * sec
+
+    nl = logm * sections
     # if I've set z externally, don't bother with this
     if z==None:
         if standard=="802.11n" or standard=="802.16":
@@ -1584,14 +1585,14 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     #ax.plot(EbN0_dB, BER_amp[:,1], 'k--', label = 'SPARC w/ outer code: after 2nd round of AMP')
     #ax.plot(EbN0_dB, BER_ldpc[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of LDPC')
     ax.plot(EbN0_dB, BER_amp[:,soft_iter-1], 'k-', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of AMP')
-    ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'k--', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
+    ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'k--.', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
     ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
 
     plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
     plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
     plt.ylabel('BER', fontsize=15)
     plt.tight_layout()
-    plt.legend(loc=2, prop={'size': 8})
+    plt.legend(loc=3, prop={'size': 7})
     plt.savefig(png_filename)
 
 
@@ -1648,13 +1649,16 @@ if __name__ == "__main__":
     #csv_filename="shinit_M32L256Rsparc1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.csv", png_filename="softhardinit_M32L256Ramp1P4_standardGood_dc6_Rldpc0_45z_32_it5_rep10.png",
     '''
     
-    '''
+    
     #####################################
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
+    # threshold initialisations info exchange
+    sections = 512
     ldpcparams = LDPCParams('802.16', '5/6', z=None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.csv", png_filename="shinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep100_threshold0_6.png", datapoints=10, MIN_ERRORS=100, MAX_BLOCKS=150, soft_iter=2, threshold=0.6)
-    '''
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="thresholdinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep200_threshold0_6.csv", png_filename="thresholdinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep200_threshold0_6.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=2, threshold=0.6, sections=sections)
+    
+
     '''
     ######################################
     # Plot the parameterised power allocation
@@ -1745,7 +1749,7 @@ if __name__ == "__main__":
     
     
     '''
-    
+    '''
     ##########################################
     # Plot waterfall curves
     # Compare ldpc with bpsk of rate 5/6 to a sparc with sparc rate 1 and ldpc rate 5/6 with all sections covered
@@ -1759,7 +1763,7 @@ if __name__ == "__main__":
     waterfall(sparcparams, ldpcparams, init='originalHard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.pdf', sections=sections)
 
     print("Wall clock time elapsed: ", time.time()-t0)
-    
+    '''
     '''
     #########################################
     # Plot hard and soft loops

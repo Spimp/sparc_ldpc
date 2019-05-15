@@ -155,7 +155,7 @@ def remove_common_zeros(a, b):
 # snr_dB is the snr of the simulation of the channel 
 # E is the LLRs on the a posteriori information from the AMP decoder
 # returns E
-def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
+def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
 	# Sparc parameters
 	L = sparcparams.L
 	M = sparcparams.M
@@ -221,7 +221,7 @@ def calc_E(X, I_a, snr_dB, SPARCParams, csv_filename=None, threshold=0.5):
 		# replace the LLRs for the amp_sections with the new LLRs
 		E[amp_positions] = E_amp_sections
 	###########################
-	#Note testing out line below. 
+	#Note testing out line below. CHECKED and seems to work fine. 
 	np.clip(E, -55, 55, out=E)
 	#print("E: ", E)
 	np.set_printoptions(threshold=np.nan)
@@ -270,11 +270,11 @@ def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False, snr_dB='No
 		# Plot histogram of P(E(X_i)|X_i=+1).
 		plt.figure(1)
 		plt.hist(E[index_pos1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR=$"+str(snr_dB)+"dB")
+		#plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR=$"+str(snr_dB)+"dB")
 
 		plt.figure(2)
 		plt.hist(E[index_neg1], bins=bin_edges, density = True)
-		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR=$"+str(snr_dB)+"dB")
+		#plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR=$"+str(snr_dB)+"dB")
 		plt.show()
 
 	return PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width
@@ -443,24 +443,25 @@ def plane_intersect(a, b, plot=False):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=256
-	M=32
+	L=512
+	M=512
 	logm = np.log2(M)
 	R_sparc = 1
 	export = True
-	
+
+	'''
 	###################################
 	# Plotting the combined EXIT chart for amp and an LDPC with VND of different degrees
-	R_ldpc = 0.5
-	d_c=7
+	R_ldpc = 3/8
+	d_c=6
 	# the average value of d_v
 	dv_bar = (1-R_ldpc)*d_c
 	
-	# This is for M=32 L=256 R_sparc=1 snr=10dB
-	poly_coeff = np.array([0.50076363, 0.14600204, -1.02864634, 1.42392821])
+	# This is for M=64 L=256 R_sparc=1 snr=10dB
+	poly_coeff = np.array([0.43764836, 0.71227327, -2.57287966, 2.4402426])
 	# working with an ldpc code where d_v,1=2, d_v,2=4, d_v,3=18
 	d_v1=2
-	d_v2=7
+	d_v2=5
 	d_v3=12
 
 	a_v = np.zeros(30)
@@ -469,7 +470,7 @@ if __name__ == "__main__":
 	# point on line of intersection point and direction of line d
 	point, d = plane_intersect(a, b)
 
-	a_v[d_v3] = 0.0
+	a_v[d_v3] = 0.1
 	A = np.array([[d_v1,d_v2],[1,1]])
 	b = np.array([dv_bar-d_v3*a_v[d_v3], 1-a_v[d_v3]])
 	# solve the simulataneous equations with a3 fixed
@@ -481,9 +482,9 @@ if __name__ == "__main__":
 	print(a_v)
 	a_v = np.round(a_v, 3)
 	
-	a_v[d_v1] = 29/40
-	a_v[d_v2] = 11/40
-	a_v[d_v3] = 0/40
+	#a_v[d_v1] = 29/40
+	#a_v[d_v2] = 11/40
+	#a_v[d_v3] = 0/40
 	print(a_v)
 	plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc)
 	'''
@@ -501,39 +502,41 @@ if __name__ == "__main__":
 	ax.set_zlabel("a3")
 	plt.show()
 	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
-	
+	'''	
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
 	print(X)
-	snr_dB = 12.0
-	I_a = 0.9
-	P=2
+	EbN0_dB = 7
+	snr = (10**(EbN0_dB/20))/(1/(2*R))
+	snr_dB = 20*np.log10(snr)
+	I_a = 0.8
+	P=4
 	snr = 10**(snr_dB/20)
 	C = 0.5 * np.log2(1 + snr)
-	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64, a=R_sparc/C, C=C, f=R_sparc/C)
+	sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64)#, a=R_sparc/C, C=C, f=R_sparc/C)
 
-	E = calc_E(X, I_a, snr_dB, sparcparams)
+	E = calc_E(X, I_a, snr_dB, sparcparams, threshold=0.6)
 	np.clip(E, -55, 55, out=E)
 
 	index_neg1 = np.where(X==-1)[0]
 	print(np.ndarray.min(E))
 	print(E[index_neg1])
-	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=500, max_bin=60, min_bin=-60, plot=True, snr_dB=snr_dB)
+	PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, _ = hist_E(X, E, bin_number=350, max_bin=60, min_bin=-60, plot=True, snr_dB=snr_dB)
 	print("positive mean: ", mean_pos)
 	print("negative mean: ", mean_neg)
 	print("positive variance: ", var_pos)
 	print("negative variance: ", var_neg)
 	
+	
+
 	'''
 	
-	
-	'''
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	bin_number = 125
-	repeats = 150
-	datapoints = 1
-	x_axis_points=30
+	bin_number = 350
+	repeats = 100
+	datapoints = 4
+	x_axis_points=10
 	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -542,7 +545,10 @@ if __name__ == "__main__":
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,x_axis_points))
-	snr_dB = np.linspace(10, 10, datapoints)
+	#EbN0_dB = np.linspace(5, 8, datapoints)
+	#snr = (10**(EbN0_dB/20))/(1/(2*R))
+	# work in snr for the EXIT charts as then don't have to work about EbN0 and rate. 
+	snr_dB = np.linspace(11, 14, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
@@ -560,7 +566,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.8)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.6)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -582,17 +588,29 @@ if __name__ == "__main__":
 	I_e_accum = I_e_accum/repeats
 	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
 	# for snr=10dB
-	poly_coeff = polynomial(I_a_range, I_e_accum[0,:]) 
+	curve=2
+	poly_coeff = polynomial(I_a_range, I_e_accum[curve,:]) 
 	# Note that this will give the constant first and the coefficient of I_a**3 last
 	print("The coefficients for the polynomial are: ",poly_coeff)
 	print("Wall clock time elapsed: ", time.time()-t0)
 
+	plt.figure(1)
 	fig, ax = plt.subplots()
 	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
-	#ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
-	#ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
-	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
+	plt.xlabel('$I_A$')
+	plt.ylabel('$I_E$')
+	plt.legend(loc=6, prop={'size': 7})
+	#plt.title("The EXIT chart for the AMP decoder")
+	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
+	plt.savefig('amp_exit_threshold_LM512R1P4Bins350Threshold0_6_SNR100reps.pdf')	
+	
+	plt.figure(2)
+	fig, ax = plt.subplots()
+	ax.plot(I_a_range, I_e_accum[curve,:], 'b--', label='$SNR$='+str(snr_dB[curve])+'$dB$')
 	# plot the polynomial representation of this exit curve 
 	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
 	ones = np.ones((101, 1))
@@ -603,14 +621,10 @@ if __name__ == "__main__":
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
-	plt.title("The EXIT chart for the AMP decoder")
-	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	#plt.savefig('amp_exit_hardinit_LM512R1P4Bins125Threshold0_45.png')	
-	plt.show()
-	'''
+	plt.title(str(poly_coeff))
+	plt.savefig('polynomial_threshold_LM512R1P4Bins350Threshold0_6_SNR100reps.pdf')
 	
 	'''
-	
 	#############################
 	# plot histogram of the sectionwise probabilities for the correct position
 	I_a = 0.5

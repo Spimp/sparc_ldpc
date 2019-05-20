@@ -1677,10 +1677,10 @@ if __name__ == "__main__":
     sections = 256
     ldpcparams = LDPCParams('2_7_12_good', '1/2', z=None)
     sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07_200reps.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
     
     ldpcparams2 = LDPCParams('2_7_12_bad', '1/2', z=None)
-    soft_hardinit_plot(sparcparams, ldpcparams2, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
+    soft_hardinit_plot(sparcparams, ldpcparams2, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07_200reps.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
     
     print("Wall clock time elapsed: ", time.time()-t0)    
 

@@ -1206,15 +1206,15 @@ def waterfall(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_filename: st
     n = L*logm/r_sparc
     # HARD CODED RATE 5/6
     R = (L*logm-nl*(1-5/6))/n
-    # note that R should be 5/6
+    # note that R should be 5/6 unless full section coverage is not used
     print('Overall rate is: ', R)
 
     # snr at capacity
     snrc = (2**(2*R) - 1)
     EbN0c = 1/(2*R) * snrc
-    EbN0c_dB = 20*log10(EbN0c)
+    EbN0c_dB = 20*np.log10(EbN0c)
 
-    EbN0_dB = linspace(3, 10, datapoints)
+    EbN0_dB = np.linspace(3, 10, datapoints)
     # BER after first round of AMP decoding
     BER_amp_1 = np.zeros(datapoints)
     # BER after second round of AMP decoding
@@ -1361,9 +1361,9 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     # snr at capacity
     snrc = (2**(2*R) - 1)
     EbN0c = 1/(2*R) * snrc
-    EbN0c_dB = 20*log10(EbN0c)
+    EbN0c_dB = 20*np.log10(EbN0c)
 
-    SIGMA = linspace(0.8, 0.4, datapoints)
+    SIGMA = np.linspace(0.8, 0.4, datapoints)
     BER_sparc = np.zeros(datapoints)
     if soft:
         # Array of BER after ldpc decoding
@@ -1435,7 +1435,7 @@ def soft_hard_plot(soft: bool, hard: bool, sec: int, soft_iter: int, sparcparams
     #snrdB = 20*np.log10(P/sigma**2)
     EbN0 = 1/(2*R) * (p/SIGMA**2)
     #print(EbN0)
-    EbN0_dB = 20*log10(EbN0)
+    EbN0_dB = 20*np.log10(EbN0)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
@@ -1520,9 +1520,9 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     # snr at capacity -> found by inverting the equation C = 1/2*log2(1+snr) where C is the rate here
     snrc = (2**(2*R) - 1)
     EbN0c = 1/(2*R) * snrc
-    EbN0c_dB = 20*log10(EbN0c)
+    EbN0c_dB = 20*np.log10(EbN0c)
 
-    SIGMA = linspace(0.9, 1.4, datapoints)
+    SIGMA = np.linspace(0.9, 1.4, datapoints)
     # BER after each round of AMP decoding
     BER_amp = np.zeros((datapoints, soft_iter))
     # BER after each round of ldpc
@@ -1566,7 +1566,7 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     #snrdB = 20*np.log10(P/sigma**2)
     EbN0 = 1/(2*R) * (p/SIGMA**2)
     #print(EbN0)
-    EbN0_dB = 20*log10(EbN0)
+    EbN0_dB = 20*np.log10(EbN0)
     # open file you want to write CSV output to. 'a' means its in append mode. Switching this to 'w' will make it overwrite the file.
     myFile = open(csv_filename, 'a')
     with myFile:
@@ -1577,6 +1577,27 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
             writer.writerow({'EbN0_dB' : EbN0_dB[k], 'BER_amp': BER_amp[k,:],'BER_ldpc' : BER_ldpc[k,:], 'BER_plain': BER_plain[k]})
 
     #print("BER_ldpc is: ", BER_ldpc)
+    plt.figure(1)
+    fig, ax = plt.subplots()
+    ax.set_yscale('log', basey=10)
+    # plot the results after the first and last soft iteration
+    ax.plot(EbN0_dB, BER_amp[:,0], 'm--.', label = 'SPARC w/ outer code: after 1 round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,0], 'm--', label = 'SPARC w/ outer code: after 1 round of LDPC')
+    ax.plot(EbN0_dB, BER_amp[:,1], 'k-', label = 'SPARC w/ outer code: after 2nd round of AMP')
+    ax.plot(EbN0_dB, BER_ldpc[:,1], 'k--.', label = 'SPARC w/ outer code: after 2nd round of LDPC')
+    #ax.plot(EbN0_dB, BER_amp[:,soft_iter-1], 'k-', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of AMP')
+    #ax.plot(EbN0_dB, BER_ldpc[:,soft_iter-1], 'k--.', label = 'SPARC w/ outer code: after '+str(soft_iter)+' rounds of LDPC')
+    ax.plot(EbN0_dB, BER_plain, 'b-', label = 'Plain SPARC')
+
+    plt.axvline(x=EbN0c_dB, color='r', linestyle='-', label='Shannon limit')
+    plt.xlabel('$E_b/N_0$ (dB)', fontsize=15) # at some point need to work out how to write this so it outputs properly
+    plt.ylabel('BER', fontsize=15)
+    plt.tight_layout()
+    plt.legend(loc=3, prop={'size': 7})
+    plt.savefig(str('it2'+png_filename))
+
+
+    plt.figure(2)
     fig, ax = plt.subplots()
     ax.set_yscale('log', basey=10)
     # plot the results after the first and last soft iteration
@@ -1593,7 +1614,7 @@ def soft_hardinit_plot(sparcparams: SPARCParams, ldpcparams: LDPCParams, csv_fil
     plt.ylabel('BER', fontsize=15)
     plt.tight_layout()
     plt.legend(loc=3, prop={'size': 7})
-    plt.savefig(png_filename)
+    plt.savefig(str('it'+ str(soft_iter)+ '_' +png_filename))
 
 
 if __name__ == "__main__":
@@ -1653,11 +1674,15 @@ if __name__ == "__main__":
     #####################################
     # Running new soft info exchange on original L=M=512 sparc with Jossy ldpc of rate 5/6
     # threshold initialisations info exchange
-    sections = 512
-    ldpcparams = LDPCParams('802.16', '5/6', z=None)
-    sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="thresholdinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep200_threshold0_6.csv", png_filename="thresholdinit_LM512Rsparc1P4_stndrd80216_Rldpc5_6_it2_rep200_threshold0_6.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=2, threshold=0.6, sections=sections)
+    sections = 256
+    ldpcparams = LDPCParams('2_7_12_good', '1/2', z=None)
+    sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
+    soft_hardinit_plot(sparcparams, ldpcparams, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_good_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
     
+    ldpcparams2 = LDPCParams('2_7_12_bad', '1/2', z=None)
+    soft_hardinit_plot(sparcparams, ldpcparams2, csv_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07.csv", png_filename="thresholdinit_M32L256Ramp1P4_std2_7_12_bad_Rldpc1_2z32thres07_200reps.pdf", datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, soft_iter=4, threshold=0.7, sections=sections)
+    
+    print("Wall clock time elapsed: ", time.time()-t0)    
 
     '''
     ######################################
@@ -1760,7 +1785,7 @@ if __name__ == "__main__":
     sections = 384 
     ldpcparams = LDPCParams('802.16', '5/6', None)
     sparcparams = SPARCParams(L=512, M=512, sigma=None, p=4, r=1, t=64)
-    waterfall(sparcparams, ldpcparams, init='originalHard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.csv', png_filename='EbN0_dBVsBER_waterfallOriginalHard_rep200_LM512p4r1rldpc5_6.pdf', sections=sections)
+    waterfall(sparcparams, ldpcparams, init='originalHard', pa_param=False, datapoints=10, MIN_ERRORS=200, MAX_BLOCKS=250, csv_filename='test.csv', png_filename='test.pdf', sections=sections)
 
     print("Wall clock time elapsed: ", time.time()-t0)
     '''

@@ -443,8 +443,8 @@ def plane_intersect(a, b, plot=False):
 
 if __name__ == "__main__":
 	t0=time.time()
-	L=512
-	M=512
+	L=256
+	M=32
 	logm = np.log2(M)
 	R_sparc = 1
 	export = True
@@ -534,21 +534,21 @@ if __name__ == "__main__":
 	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
 	bin_number = 350
-	repeats = 100
-	datapoints = 4
-	x_axis_points=10
+	repeats = 200
+	datapoints = 3
+	x_axis_points=30
 	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
 		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
-		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r1_pa1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
+		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r_1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
 		print(len(imported_E_dict))
 	# accumulative values of I_e for each snr value
 	I_e_accum = np.zeros((datapoints,x_axis_points))
 	#EbN0_dB = np.linspace(5, 8, datapoints)
 	#snr = (10**(EbN0_dB/20))/(1/(2*R))
 	# work in snr for the EXIT charts as then don't have to work about EbN0 and rate. 
-	snr_dB = np.linspace(11, 14, datapoints)
+	snr_dB = np.linspace(10, 12, datapoints)
 	for k in range(repeats):
 		j=0
 		for s_dB in snr_dB:
@@ -566,7 +566,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.6)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.85)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -587,8 +587,7 @@ if __name__ == "__main__":
 			j=j+1
 	I_e_accum = I_e_accum/repeats
 	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
-	# for snr=10dB
-	curve=2
+	curve=1
 	poly_coeff = polynomial(I_a_range, I_e_accum[curve,:]) 
 	# Note that this will give the constant first and the coefficient of I_a**3 last
 	print("The coefficients for the polynomial are: ",poly_coeff)
@@ -599,14 +598,15 @@ if __name__ == "__main__":
 	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
 	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
 	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
 	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
 	plt.xlabel('$I_A$')
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	#plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exit_threshold_LM512R1P4Bins350Threshold0_6_SNR100reps.pdf')	
+	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')	
+	plt.show()
 	
 	plt.figure(2)
 	fig, ax = plt.subplots()
@@ -622,7 +622,8 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title(str(poly_coeff))
-	plt.savefig('polynomial_threshold_LM512R1P4Bins350Threshold0_6_SNR100reps.pdf')
+	plt.show()
+	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')
 	
 	'''
 	#############################

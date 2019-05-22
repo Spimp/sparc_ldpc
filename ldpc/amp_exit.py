@@ -606,7 +606,7 @@ if __name__ == "__main__":
 	#plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
 	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')	
-	plt.show()
+	#plt.show()
 	
 	plt.figure(2)
 	fig, ax = plt.subplots()
@@ -622,7 +622,7 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title(str(poly_coeff))
-	plt.show()
+	#plt.show()
 	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')
 	
 	'''

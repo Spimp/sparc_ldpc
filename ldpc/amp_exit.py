@@ -610,7 +610,7 @@ if __name__ == "__main__":
 	
 	plt.figure(2)
 	fig, ax = plt.subplots()
-	ax.plot(I_a_range, I_e_accum[curve,:], 'b--', label='$SNR$='+str(snr_dB[curve])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[curve,:], 'k--', label='$SNR$='+str(snr_dB[curve])+'$dB$')
 	# plot the polynomial representation of this exit curve 
 	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
 	ones = np.ones((101, 1))

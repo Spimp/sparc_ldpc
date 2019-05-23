@@ -536,7 +536,7 @@ if __name__ == "__main__":
 	bin_number = 350
 	repeats = 200
 	datapoints = 3
-	x_axis_points=30
+	x_axis_points=20
 	I_a_range = np.linspace(0, 0.99, x_axis_points)
 	P = 4
 	if export==False:	# if not exporting, want to import E into a dictionary
@@ -566,7 +566,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.85)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.95)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -605,7 +605,7 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	#plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')	
+	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_95_200reps.pdf')	
 	#plt.show()
 	
 	plt.figure(2)
@@ -623,7 +623,7 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title(str(poly_coeff))
 	#plt.show()
-	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_85_200reps.pdf')
+	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_95_200reps.pdf')
 	
 	'''
 	#############################

@@ -395,10 +395,10 @@ def plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc):
 	for k in range(len(I_E_CND)):
 		I_E_CND[k] = 1 - exit.I_E_REP(I_A_CND[k], d_c)
 	fig, ax = plt.subplots()
-	plt.plot(I_A_VND, I_E_VND, color='k', linestyle='-', label = 'VND')
-	plt.plot(I_E_CND, I_A_CND, color='r', linestyle='-', label = 'CND')
-	plt.xlabel('$I_{A,VND}, I_{E,CND}$', fontsize=18) 
-	plt.ylabel('$I_{E,VND}, I_{A,CND}$', fontsize=18)
+	plt.plot(I_A_VND, I_E_VND, color='k', linestyle='-', label = '$VND_{comb}$')
+	plt.plot(I_E_CND, I_A_CND, color='r', linestyle='-', label = '$CND$')
+	plt.xlabel('$I_{A,VND_{comb}}, I_{E,CND}$', fontsize=18) 
+	plt.ylabel('$I_{E,VND_{comb}}, I_{A,CND}$', fontsize=18)
 	plt.tight_layout()
 	plt.legend()
 	plt.show()
@@ -452,16 +452,16 @@ if __name__ == "__main__":
 	'''
 	###################################
 	# Plotting the combined EXIT chart for amp and an LDPC with VND of different degrees
-	R_ldpc = 3/8
-	d_c=6
+	R_ldpc = 1/2
+	d_c=7
 	# the average value of d_v
 	dv_bar = (1-R_ldpc)*d_c
 	
 	# This is for M=64 L=256 R_sparc=1 snr=10dB
-	poly_coeff = np.array([0.43764836, 0.71227327, -2.57287966, 2.4402426])
+	poly_coeff = np.array([0.50076363, 0.14600204, -1.02864634, 1.42392821])
 	# working with an ldpc code where d_v,1=2, d_v,2=4, d_v,3=18
 	d_v1=2
-	d_v2=5
+	d_v2=7
 	d_v3=12
 
 	a_v = np.zeros(30)
@@ -502,7 +502,7 @@ if __name__ == "__main__":
 	ax.set_zlabel("a3")
 	plt.show()
 	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
-	'''	
+	'''
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
@@ -566,7 +566,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.95)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.99)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -605,7 +605,7 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	#plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_95_200reps.pdf')	
+	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')	
 	#plt.show()
 	
 	plt.figure(2)
@@ -623,7 +623,7 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title(str(poly_coeff))
 	#plt.show()
-	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_95_200reps.pdf')
+	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')
 	
 	'''
 	#############################

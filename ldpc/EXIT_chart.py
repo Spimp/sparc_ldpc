@@ -1,3 +1,7 @@
+'''
+This script produces an EXIT chart for Jossy's 5/6 LDPC code that has the proto graph matrix given below. 
+To do this it counts the number of -1s in proto to find the variable node and check node degree distributions. 
+'''
 import numpy as np
 import math as math
 from pylab import * 
@@ -99,15 +103,6 @@ if __name__ == "__main__":
 		if dv_count[i]!=0:
 			for j in range(len(I_Ev)):
 				I_Ev[j] = I_Ev[j]+b_v[i]*I_E_VND(I_Av[j], i, EbN0, R)
-
-
-	# plot I_A,CND as a func of I_E and plot this on the same graph
-	'''I_Ec = linspace(0.1, 1, 9)
-	I_Ac = np.zeros(I_Ec.shape)
-	for k in range(len(dc_count)):
-		if dc_count[k]!=0:
-			for j in range(len(I_Ac)):
-				I_Ac[j] = I_Ac[j] + b_c[k]*I_A_CND(I_Ec[j], k)'''
 
 	# Find I_E,CND as a func of I_A and then plot this on the same graph 
 	I_Ac = linspace(0.1, 1, 19)

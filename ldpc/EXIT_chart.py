@@ -8,6 +8,7 @@ import csv
 
 
 # Need to import the protograph matrix from ldpc. Or copy it in
+# 0 corresponds to the identity matrix and -1 to the all zero matrix
 proto = np.array([
                         [17, 13, 8, 21, 9, 3, 18, 12, 10, 0, 4, 15, 19, 2, 5, 10, 26, 19, 13, 13, 1, 0, -1, -1],
                         [3, 12, 11, 14, 11, 25, 5, 18, 0, 9, 2, 26, 26, 10, 24, 7, 14, 20, 4, 2, -1, 0, 0, -1],
@@ -21,7 +22,7 @@ def J_inverse(I):
 	if (I<=0.3646):
 		return 1.09542*(I**2) + 0.214217*(I) + 2.33727*np.sqrt(I)
 	else:
-		return -0.706692*log(0.386013*(1-I)) + 1.75017*(I) 
+		return -0.706692*np.log(0.386013*(1-I)) + 1.75017*(I) 
 
 def J(sigma):
 	assert sigma>=0
@@ -52,7 +53,7 @@ if __name__ == "__main__":
 	z=1
 	# rate of the ldpc code
 	R=5/6
-	EbN0_dB = 10
+	EbN0_dB = 7
 	EbN0 = 10**(EbN0_dB/20)
 
 	num_rows = proto.shape[0]
@@ -64,7 +65,8 @@ if __name__ == "__main__":
 	# gives the degree of the variable nodes
 	dv_degrees = linspace(0, 4, 5)
 	for col in proto.T:
-		dv_count[np.count_nonzero(col)] += 1
+		# add 1 to col so we count the number of '-1' in proto. 
+		dv_count[np.count_nonzero(col+1)] += 1
 
 	# Find degree of check nodes and store in array
 	# There are 25 different degrees you could get so
@@ -73,7 +75,8 @@ if __name__ == "__main__":
 	# gives the degree of the check nodes
 	dc_degrees = linspace(0,24,25)
 	for row in proto:
-		dc_count[np.count_nonzero(row)] += 1
+		# add 1 to row so we count the number of '-1' in proto.
+		dc_count[np.count_nonzero(row+1)] += 1
 	# Find average check node degree
 	dc_aver = (1/num_rows)*sum(dc_count*dc_degrees)
 

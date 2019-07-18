@@ -12,12 +12,16 @@ from sparc_ldpc import *
 import EXIT_chart as exit
 
 class imported_E:
+	"""
+	class used to store E when it is imported from a csv file. 
+	"""
 	def __init__(self, X, E, I_a, SNR_dB):
 		self.X = X
 		self.E = E
 		self.I_a = I_a 
 		self.SNR_dB = SNR_dB
-	def __eq__(self, other): 
+	def __eq__(self, other):
+		# check if two sets of E data are the same. 
 		return (self.X==other.X).all() and (self.E==other.E).all() and self.I_a==other.I_a and self.SNR_dB==other.SNR_dB
 
 # J and J_inverse based on approximation in the appendix of Design of LDPC Codes for modulation and detection.
@@ -50,6 +54,24 @@ def gen_bits(length):
 # it then produces a hard initialisation for the amp decoder y_new which only contains sections
 # which were not decoded well in the A and then bp2sp conversion.
 def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5, ldpc_sections=None):
+	"""
+	Used in threshold initialised information exchange to produce the reduced channel output and the 
+	functions for the smaller design matrix which only contains sections which didn't exceed the threshold. 
+	beta: sectionwise posterior probabilities output from the bp2sp conversion. 
+	L: number of sections in beta
+	M: number of columns per section
+	ordering: the ordering of the design matrix A. Allows you to select the relevant columns of the design matrix
+	y: the original channel output
+	Pl: Vector containing the power allocation. Should have one entry per section of beta
+	Ab: the function used to apply the design matrix to a beta vector
+	threshold: above this outputs from LDPC decoder are hard decoded
+	ldpc_sections: number of sections covered by the LDPC code. 
+	Returns:
+	y_new: reduced channel output
+	Ab_new & Az_new: reduced functions used for the design matrix. Just for sections that don't exceed threshold
+	amp_sections: sections which should have amp decoding performed on them
+	L_amp_sections: the number of sections in amp_sections.
+	"""
 	if ldpc_sections==None:
 		# all sections covered by the ldpc code
 		ldpc_sections = L
@@ -72,8 +94,9 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5, ldpc_
 		if idx[0].size==1:
 			# set all positions to zero
 			beta_0[l*M:(l+1)*M] = 0
-			# set the position corresponding to the probability greater than the threshold to 1
-			beta_0[(l*M)+idx[0]] = 1	
+			# set the position corresponding to the probability greater than the threshold to the power allocation 
+			# NOTE: previously I was setting this to 1 which was an error. 
+			beta_0[(l*M)+idx[0]] = np.sqrt(n * Pl[l])
 		else:
 			# else the section does not contain any high probability components
 			# set all sections to zero
@@ -84,6 +107,7 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5, ldpc_
 		idx=None
 	# hard decision initialisation
 	# peel off contributions from the decoded sections from y to generate y'
+
 	x_remove = Ab(beta_0)
 	y_new = y - x_remove
 	ordering_reduced = ordering[amp_sections,:]
@@ -97,13 +121,16 @@ def hard_initialisation(beta, L, M, n, ordering, y, Pl, Ab, threshold=0.5, ldpc_
 
 	return y_new, Ab_new, Az_new, amp_sections, L_amp_sections
 
-# Function produces y from X a series of bits for inputting into the amp() function
-# X: array of LlogM input bits
-# L, M, N are all SPARC parameters
-# sigma_w is the variance of the noise
-# P is the power that will be uniformly allocated
-# returns: y, Ab, Az, and Pl
+
 def prep_y(X, L, M, n, sigma_w, P, a=None, f=None, C=None):
+	"""
+	Produces the channel output y from the input X 
+	X: array of LlogM input bits taking values -1 and +1 
+	L, M, N are all SPARC parameters
+	sigma_w: is the standard deviation of the noise
+	P: total power 
+	returns: y, Ab, Az, and Pl
+	"""
 	# Calculate the power allocation
 	if a==None:
 		# uniform power allocation
@@ -115,12 +142,10 @@ def prep_y(X, L, M, n, sigma_w, P, a=None, f=None, C=None):
 	X = (X-1)*-1/2
     # convert the bits to indices for encoding
 	X_indices = bits2indices(X, M)
-
 	assert len(X_indices)==L
 	   
 	# Generate the SPARC transform functions A.beta and A'.z
 	Ab, Az, ordering = sparc_transforms(L, M, n)
-
 	# Generate our transmitted signal x
 	β_0 = np.zeros((L*M, 1))
 	for l in range(L):
@@ -134,9 +159,11 @@ def prep_y(X, L, M, n, sigma_w, P, a=None, f=None, C=None):
 
 	return y, Ab, Az, Pl, ordering
 
-# a and b are 2 numpy array of the same length.
-# When there is a zero in both a and b at the same index, this is removed from both arrays. 
 def remove_common_zeros(a, b):
+	"""
+	a and b are 2 numpy array of the same length.
+	When there is a zero in both a and b at the same index, this is removed from both arrays.
+	"""
 	# find the indices of all zeros in a
 	a_indices = np.where(a==0)[0]
 	# find the indices of all zeros in b
@@ -156,6 +183,13 @@ def remove_common_zeros(a, b):
 # E is the LLRs on the a posteriori information from the AMP decoder
 # returns E
 def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
+	"""
+	calculates E
+	X: randomly generated bits taking values -1 and 1
+	I_a: the mutual information of the a priori input to the AMP decoder
+	snr_dB: the snr of the simulation of the channel
+	Returns E: the extrinsic log likelihood ratios (LLRs) produced by the AMP decoder
+	"""
 	# Sparc parameters
 	L = sparcparams.L
 	M = sparcparams.M
@@ -192,7 +226,7 @@ def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
 	#print("max in beta_0: ", np.max(beta_0))
 	# perform amp decoding on these beta_0
 	sigma=None # this value isn't actually used in the function so doesn't matter
-	# Generate y, Ab, and Az to pass into amp()
+	# Generate y, Ab, Pl, and ordering to pass into hard)initialisation()
 	y, Ab, _, Pl, ordering = prep_y(X, L, M, n, sigma_w, P, a, f, C)
 
 	y_new, Ab_new, Az_new, amp_sections, L_amp_sections = hard_initialisation(beta_0, L, M, n, ordering, y, Pl, Ab, threshold)
@@ -208,8 +242,6 @@ def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
 		#print("sum of sectionwise is: ", np.sum(sectionwise))
 		#print("sum of sectionwise should be: ", L_amp_sections)
 		bitwise_e = sp2bp(sectionwise, L_amp_sections, M)
-		# clip the bitwise_e to avoid a divide by zero error in the log
-		#np.clip(bitwise_e, 0.00000000000000000000000001, 1-0.00000000000000000000000001, out=bitwise_e)
 		# convert bitwise post. to LLRs 
 		E_amp_sections = np.log(1-bitwise_e)-np.log(bitwise_e)
 		# set -inf and +inf to real numbers with v large magnitude
@@ -222,6 +254,8 @@ def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
 		E[amp_positions] = E_amp_sections
 	###########################
 	#Note testing out line below. CHECKED and seems to work fine. 
+	# doing this so that values that get set to inf get counted in the histogram 
+	# But actually I don't think this was happening much so this line is maybe redundant. 
 	np.clip(E, -55, 55, out=E)
 	#print("E: ", E)
 	np.set_printoptions(threshold=np.nan)
@@ -235,12 +269,24 @@ def calc_E(X, I_a, snr_dB, sparcparams, csv_filename=None, threshold=0.5):
 
 	return E
 
-# given E and X return the histograms of E
-# X = generated input bits
-# bin_number, max_bin, min_bin determine the number of histogram bins and the range of the bins
-# plot is a bool. Set true to plot histograms
-# Return: histograms of E, and their means and variances. 
 def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False, snr_dB='Not given'):
+	"""
+	Produce histogram of E the extrinsic LLRs
+	X: generated input bits 
+	E: extrinisic LLRs 
+	bin_number: number of bins used for the histogram
+	max_bin, min_bin: set the range over which the histogram is plotted
+	plot: bool to determine if this function plots the histogram values it is producing
+	snr_dB: the snr in dB that was used to produce E. This is only used for the figure headings 
+	Return: 
+	PE_pos: the histogram/ probability distribution of E values which have positive input X
+	PE_neg: the histogram of E values for negative input X
+	mean_pos: the mean of the positive histogram
+	mean_neg: the mean of the negative histogram
+	var_pos: the variance of the positive histogram
+	var_neg: the variance of the negative histogram
+	bin_width: the width of each bin
+	"""
 	assert(len(E)==len(X))
 
 	# find the indices of all the occurences of a 1 in X
@@ -270,17 +316,24 @@ def hist_E(X, E, bin_number=500, max_bin=40, min_bin=-40, plot=False, snr_dB='No
 		# Plot histogram of P(E(X_i)|X_i=+1).
 		plt.figure(1)
 		plt.hist(E[index_pos1], bins=bin_edges, density = True)
-		#plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR=$"+str(snr_dB)+"dB")
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=+1)$."+" $SNR=$"+str(snr_dB)+"dB")
 
 		plt.figure(2)
 		plt.hist(E[index_neg1], bins=bin_edges, density = True)
-		#plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR=$"+str(snr_dB)+"dB")
+		plt.title("Normalised histogram of $P(E(X_i)|X_i=-1)$."+" $SNR=$"+str(snr_dB)+"dB")
 		plt.show()
 
 	return PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width
 
-# calculate I_e from the relevant histograms of E and the bin_width used for these histograms
 def calc_I_e(PE_pos, PE_neg, bin_width):
+	"""
+	Calculate I_e, the extrinsic mutual information 
+	Implementing the integral shown in step g section 4.3.1 of the report
+	PE_pos: histogram of E values for positive input X
+	PE_neg: histogram of E values for negative input X
+	bin_width: the width of the histogram bins
+	return: I_es
+	"""
 	# remove all the common zeros to avoid divide by zero. 
 	PE_pos, PE_neg = remove_common_zeros(PE_pos, PE_neg)
 
@@ -296,12 +349,20 @@ def calc_I_e(PE_pos, PE_neg, bin_width):
 	I_e = 1/2 * (bin_width*sum(integral_neg) + bin_width*sum(integral_pos))
 	#print(I_e)
 	return I_e
-
-# import E and the corresponding X, I_a, and snr_dB from file.
-# store them in a new class which has a matrix of the repeats of E
-# and of X and the corresponding I_a and snr_dB
-# return a dictionary of these object, each indexed by str(I_a)+' '+str(SNR_dB) 
+ 
 def import_E_fromfile(fileName, datapoints, repeats, Llogm):
+	"""
+	If data from a previous run has been exported to a csv file, this function reads that data in 
+	imports E and the corresponding X, I_a, and snr_dB from file.
+	store them in a new class which has a matrix of the repeats of E
+	and of X and the corresponding I_a and snr_dB
+	return a dictionary of these object, each indexed by str(I_a)+' '+str(SNR_dB)
+	fileName: a csv filename
+	datapoints: the number of snrs included in the data
+	repeats: the number of times each datapoint is repeated
+	Llogm: the number of sections multiplied by the log of the number of columns in each section (i.e. the total number of bits represented by the SPARC)
+	"""
+
 	# allows you pick out numbers from strings. 
 	numeric_const_pattern = '[-+]? (?: (?: \d* \. \d+ ) | (?: \d+ \.? ) )(?: [Ee] [+-]? \d+ ) ?'
 	rx = re.compile(numeric_const_pattern, re.VERBOSE)
@@ -336,35 +397,48 @@ def import_E_fromfile(fileName, datapoints, repeats, Llogm):
 					#print(str(np.round(I_a,1))+' '+str(int(np.round(SNR_dB)))+' '+str(int(i)))
 	return imported_E_dict
 
-# Parameters: I_a array containing all the I_a for the EXIT curve. 
-# I_e array containing the corresponding I_e values. 
-# Returns the 3rd order polynomial that best fits an EXIT curve based on LS
-# i.e. returns array of the polynomial coefficients. 
-# return has order c0,c1,c2,c3 where c0 is the constant and c3 is the coefficient of I_a^3
 def polynomial(I_a, I_e):
+	"""
+	Produces a 3rd order polynomial to fit the exit curve
+	I_a: array of apriori mutual information
+	I_e: array of the corresponding extrinsic mutual information
+	return: c array of polynomial coefficients
+	c[0]: the constant
+	c[3]: is the coefficient of I_a^3
+	"""
 	a = np.zeros((len(I_a), 4))
 	for i in range(4):
 		a[:,i] = I_a**i
 	c = np.linalg.lstsq(a, I_e, rcond=-1)[0]
 	return c	
 
-# returns I_E_VND, the output from the combined AMP decoder and VND
-# The amp exit curve is represented by a 3rd order polynomial equation
-# with the coefficients passed in as array poly_coeff
-# d_v is the degree of the variable node in question
+
+# See section 4.4 Combined EXIT chart in the report
 def I_E_VND_amp(I_A_VND, d_v, poly_coeff):
+	"""
+	Calculates the value of the extrinsic mutual information for the combined AMP and VND decoder for the input I_A_VND
+	I_A_VND: a priori mutual information for the VND decoder. Single value, does not take an array
+	d_v: degree of the variable node in question
+	poly_coeff: the coefficients of the 3rd order polynomial used to approx the amp exit curve
+	return: the extrinsic mutual information output from the VND. 
+	"""
+	# calculate a priori mutual information for the AMP decoder
 	I_A_amp = J(np.sqrt(d_v)*J_inverse(I_A_VND))
+	# calculate the extrinsic mutual information for the AMP decoder using the 3rd order polynomial approximation
 	I_E_amp = np.sum(poly_coeff * np.array([1, I_A_amp, I_A_amp**2, I_A_amp**3]))
-	# clip I_E_amp at a max of I_E_amp as it cannot exceed this
+	# clip I_E_amp at a max of I_E_amp=0.9999 as it must be less than 1
 	I_E_amp = np.clip(I_E_amp, a_min=None, a_max=0.9999)
 	I_E_VND = J(np.sqrt((d_v-1)*(J_inverse(I_A_VND))**2+(J_inverse(I_E_amp))**2))
 	return I_E_VND
 
-# calculate the array I_E_VND as a function of I_A_VND and I_A_amp over a range of d_vs.
-# a_v the fraction of variable nodes with degree equal to its index.
-# b_v the fraction of edges incident to variables nodes of degree equivalent to the index
-# poly_coeff the 3rd order polynomial fit to the amp exit chart.
 def I_E_VND_amp_array(I_A_VND_array, a_v, b_v, poly_coeff):
+	"""
+	Calculate the array of extrinsic mutual information for the combined AMP and VND decoder. 
+	I_A_VND_array: array of a priori mutual information input to the VND decoder
+	a_v: fraction of variable nodes with degree equal to its indes
+	b_v: fraction of edges incident to variables nodes of degree equivalent to the index 
+	poly_coeff: the coefficients of the 3rd order polynomial used to approx the amp exit curve
+	"""
 	I_E_VND = np.zeros(I_A_VND_array.shape)
 	for i in range(len(a_v)):
 		# a_v gives the fraction of variable nodes with degree equal to its index.
@@ -449,7 +523,7 @@ if __name__ == "__main__":
 	R_sparc = 1
 	export = True
 
-	'''
+	"""
 	###################################
 	# Plotting the combined EXIT chart for amp and an LDPC with VND of different degrees
 	R_ldpc = 1/2
@@ -487,7 +561,7 @@ if __name__ == "__main__":
 	#a_v[d_v3] = 0/40
 	print(a_v)
 	plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc)
-	'''
+	"""
 	'''
 	a1, a2 = np.meshgrid(np.linspace(0,1,2),linspace(0,1,2))
 	a3_1 = 1/d_v3 *(4/3 - d_v1*a1 - d_v2*a2)
@@ -501,8 +575,9 @@ if __name__ == "__main__":
 	ax.set_ylabel("a2")
 	ax.set_zlabel("a3")
 	plt.show()
-	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
 	'''
+	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
+	
 	'''
 	# just plotting one set of histograms
 	X = gen_bits(int(L*logm))
@@ -531,6 +606,7 @@ if __name__ == "__main__":
 	
 
 	'''
+	
 	
 	# plotting the EXIT chart for the AMP decoder for a range of SNR
 	bin_number = 350
@@ -566,7 +642,7 @@ if __name__ == "__main__":
 					#print(X)
 
 					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.99)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.7)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
 				else:	
 					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
 					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
@@ -587,7 +663,7 @@ if __name__ == "__main__":
 			j=j+1
 	I_e_accum = I_e_accum/repeats
 	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
-	curve=1
+	curve=0
 	poly_coeff = polynomial(I_a_range, I_e_accum[curve,:]) 
 	# Note that this will give the constant first and the coefficient of I_a**3 last
 	print("The coefficients for the polynomial are: ",poly_coeff)
@@ -605,8 +681,7 @@ if __name__ == "__main__":
 	plt.legend(loc=6, prop={'size': 7})
 	#plt.title("The EXIT chart for the AMP decoder")
 	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')	
-	#plt.show()
+	#plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')	
 	
 	plt.figure(2)
 	fig, ax = plt.subplots()
@@ -622,8 +697,8 @@ if __name__ == "__main__":
 	plt.ylabel('$I_E$')
 	plt.legend(loc=6, prop={'size': 7})
 	plt.title(str(poly_coeff))
-	#plt.show()
-	plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')
+	plt.show()
+	#plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_7_200reps_Plcorrect.pdf')
 	
 	'''
 	#############################

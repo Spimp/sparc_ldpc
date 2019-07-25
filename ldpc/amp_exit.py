@@ -448,14 +448,19 @@ def I_E_VND_amp_array(I_A_VND_array, a_v, b_v, poly_coeff):
 				I_E_VND[j] = I_E_VND[j]+b_v[i]*I_E_VND_amp(I_A_VND_array[j], i, poly_coeff)
 	return I_E_VND
 
-# Plot the exit charts for the combined amp and VND and the CND
-# This function is for a fixed value of CND.
-# the ldpc curve can have variable nodes of different degrees
-# Params:
-# poly_coeff - the coefficients of the 3rd order polynomial representating the amp exit curve
-# a_v array giving the fraction of variable nodes of the degree equal to its index 
-# R_ldpc the rate of the ldpc code
+
 def plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc):
+	"""
+	Plot the exit chart for the combined SPARC and LDPC code
+	AMP decoder and VND are combined into one curve
+	CND is the other curve
+	Allows you to see if the two curves intersect
+	This function is for a regular check node decoder 
+	poly_coeff: coefficients of the 3rd ordder polynomial representing the amp exit curve 
+	a_v: array giving the fraction of variable nodes of the degree equal to its index
+	d_c: the degree of the check node. Should just be one value.
+	R_ldpc: the rate of the LDPC code 
+	"""
 	dv_degrees = np.linspace(0,len(a_v)-1,len(a_v),dtype=np.dtype(np.int16))
 	# calculating the fraction of edges incident to variables nodes of degree equivalent to the index
 	b_v = (dv_degrees*a_v)/((1-R_ldpc)*d_c)
@@ -477,10 +482,7 @@ def plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc):
 	plt.legend()
 	plt.show()
 
-# plot the exit charts for the combined amp and VND and the CND 
-# Both the VND and CND can have variable degree distributions. 
-#def plot_amp_ldpc_exit_varCND(poly_coeff, a_v, )
-
+# This function, along with trial and error was used to find valid degree distributions
 def plane_intersect(a, b, plot=False):
 	"""
 	a, b   4-tuples/lists
@@ -515,24 +517,140 @@ def plane_intersect(a, b, plot=False):
 	return point, aXb_vec
 
 
+def amp_exit_curve(sparcparams, low_snr_dB, high_snr_dB, repeats, x_axis_points, threshold, poly_curve=0, bin_number=500, import_data=False, export_csv_filename=None, import_csv_filename=None):
+	"""
+	This functions plots the AMP decoder exit curves for 4 different SNRs. 
+	This function only works for threshold initialised information exchange. 
+	It then finds a 3rd order polynomial fit for one of these curves and prints this
+	It plots this polynomial curve with the curve it is trying to represent
+	low_snr_dB: the lowest snr in decibels that an exit curve is plotted for 
+	high_snr_dB: the highest snr in decibels that an exit curve is plotted for 
+	import_data: bool to determine if the data should be imported. This speeds up this function
+	export_csv_filename: name of the csv file that data is exported to. If this is None then no data will be exported to csv
+	import_csv_filename: name of the csv file that data is imported from 
+	repeats: the number of times each datapoint is repeated
+	x_axis_points: the number of points on the x axis. I.e. the number of different I_as that are plotted 
+	sparcparams: the parameters of the sparc code being used
+	bin_number: the number of bins used for plotting the histograms of E
+	poly_curve: the curve which is used to generate the polynomial fit. This must be between 0 and curves-1
+	threshold: the threshold used in threshold initialised information exchange. 
+	"""
+	# SPARC parameters
+	L = sparcparams.L
+	M = sparcparams.M
+	logm = np.log2(M)
+	P=sparcparams.p
+	R_sparc = sparcparams.r
+	t = sparcparams.t
+	# the number of curves that are plotted/ the number of snrs included
+	# 4 curves will always be plotted unless this is changed. 
+	# Note: if want to change this, also need to change code for plotting figure 1
+	curves=4
+	I_a_range = np.linspace(0, 0.99, x_axis_points)
+	if import_data==True:	# if not exporting, want to import E into a dictionary
+		if import_csv_filename==None:
+			print("Please enter a valid csv filename in import_csv_filename")
+		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
+		imported_E_dict	= import_E_fromfile(fileName = import_csv_filename, datapoints = curves, repeats = repeats, Llogm = int(L*logm))
+		print(len(imported_E_dict))
+	# accumulative values of I_e for each snr value
+	I_e_accum = np.zeros((curves,x_axis_points))
+	# work in snr for the EXIT charts as then don't have to work about EbN0 and rate. 
+	snr_dB = np.linspace(low_snr_dB, high_snr_dB, curves)
+	for k in range(repeats):
+		j=0
+		for s_dB in snr_dB:
+			I_e = np.zeros(x_axis_points)
+			i=0
+			for I_a in I_a_range:
+				a = None
+				if import_data==False: # if import_data is true, we already have these values.
+					# randomly generate bits
+					X = gen_bits(int(L*logm))
+					#print(X)
+
+					# generate the histograms for E and some statistics about them
+					# if export_csv_filename is None, data won't be exported to a csv file.
+					E = calc_E(X, I_a, s_dB, sparcparams, threshold=threshold, csv_filename=export_csv_filename)
+				else:	
+					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
+					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
+
+					X = a.X
+					assert(len(X)==int(L*logm))
+					E = a.E
+					if(len(E)!=int(L*logm)): print("i: ", i, "I_A:", I_a, "j: ", j)
+					assert(len(E)==int(L*logm))
+				#print('X[0] is: ', X[0])
+				#print("E[0] is: ", E[0])
+				# produce histograms of E
+				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=bin_number, max_bin=60, min_bin=-60)#, plot=True, snr_dB=s_dB)
+	
+				# calculate I_e using the histograms of E 
+				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
+				i=i+1
+			I_e_accum[j,:] = I_e_accum[j,:] + I_e
+			j=j+1
+	# Average I_e over the repeats
+	I_e_accum = I_e_accum/repeats
+	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
+	poly_coeff = polynomial(I_a_range, I_e_accum[poly_curve,:]) 
+	# Note that this will give the constant first and the coefficient of I_a**3 last
+	print("The coefficients for the polynomial are: ",poly_coeff)
+	print("Wall clock time elapsed: ", time.time()-t0)
+
+	# plot the exit curves
+	fig, ax = plt.subplots()
+	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
+	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
+	ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
+	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
+	plt.xlabel('$I_A$')
+	plt.ylabel('$I_E$')
+	plt.legend(loc=6, prop={'size': 7})
+	#plt.title("The EXIT chart for the AMP decoder")
+	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
+	#plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')	
+	
+	# plot the polynomial curve fitted to the relevant exit curve
+	fig, ax = plt.subplots()
+	ax.plot(I_a_range, I_e_accum[poly_curve,:], 'k--', label='$SNR$='+str(snr_dB[poly_curve])+'$dB$')
+	# plot the polynomial representation of this exit curve 
+	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
+	ones = np.ones((101, 1))
+	# multiply the polynomial coefficients by the different values of I_A_amp and it's powers
+	I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
+	ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
+	
+	plt.xlabel('$I_A$')
+	plt.ylabel('$I_E$')
+	plt.legend(loc=6, prop={'size': 7})
+	plt.title(str(poly_coeff))
+	plt.show()
+	#plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_7_200reps_Plcorrect.pdf')
+
+
+
 if __name__ == "__main__":
 	t0=time.time()
-	L=256
-	M=32
-	logm = np.log2(M)
-	R_sparc = 1
-	export = True
-
-	"""
+	'''
+	######
+	# plotting the EXIT chart for the AMP decoder for a range of SNR
+	sparcparams = SPARCParams(L=256, M=32, sigma=None, p=4, r=1, t=64)
+	amp_exit_curve(sparcparams, low_snr_dB=10, high_snr_dB=13, repeats=1, threshold=0.7, x_axis_points=10, poly_curve=0, bin_number=350, import_data=False, export_csv_filename=None, import_csv_filename=None)
+	'''
+	
 	###################################
 	# Plotting the combined EXIT chart for amp and an LDPC with VND of different degrees
+	# use this to see if the exit curves intersect
 	R_ldpc = 1/2
 	d_c=7
 	# the average value of d_v
 	dv_bar = (1-R_ldpc)*d_c
 	
 	# This is for M=64 L=256 R_sparc=1 snr=10dB
-	poly_coeff = np.array([0.50076363, 0.14600204, -1.02864634, 1.42392821])
+	poly_coeff = np.array([0.54368203, -0.3163521, 0.59025681, 0.23228106])
 	# working with an ldpc code where d_v,1=2, d_v,2=4, d_v,3=18
 	d_v1=2
 	d_v2=7
@@ -561,8 +679,9 @@ if __name__ == "__main__":
 	#a_v[d_v3] = 0/40
 	print(a_v)
 	plot_amp_ldpc_exit(poly_coeff, a_v, d_c, R_ldpc)
-	"""
+	
 	'''
+	######## Looking for a feasible degree distribution
 	a1, a2 = np.meshgrid(np.linspace(0,1,2),linspace(0,1,2))
 	a3_1 = 1/d_v3 *(4/3 - d_v1*a1 - d_v2*a2)
 	a3_2 = 1 - a1 - a2
@@ -579,7 +698,7 @@ if __name__ == "__main__":
 	#plot_amp_ldpc_exit(poly_coeff, dv_count, a_v, d_c, R_ldpc)
 	
 	'''
-	# just plotting one set of histograms
+	##### just plotting one set of histograms
 	X = gen_bits(int(L*logm))
 	print(X)
 	EbN0_dB = 7
@@ -606,100 +725,6 @@ if __name__ == "__main__":
 	
 
 	'''
-	
-	
-	# plotting the EXIT chart for the AMP decoder for a range of SNR
-	bin_number = 350
-	repeats = 200
-	datapoints = 3
-	x_axis_points=20
-	I_a_range = np.linspace(0, 0.99, x_axis_points)
-	P = 4
-	if export==False:	# if not exporting, want to import E into a dictionary
-		# sometimes need to set the repeats in here higher than the actual repeats to ensure all the data is imported. I don't understand why!
-		imported_E_dict	= import_E_fromfile(fileName = 'exit_charts/E_data__L512_M512_20reps_500bins_r_1.csv', datapoints = datapoints, repeats = repeats, Llogm = int(L*logm))
-		print(len(imported_E_dict))
-	# accumulative values of I_e for each snr value
-	I_e_accum = np.zeros((datapoints,x_axis_points))
-	#EbN0_dB = np.linspace(5, 8, datapoints)
-	#snr = (10**(EbN0_dB/20))/(1/(2*R))
-	# work in snr for the EXIT charts as then don't have to work about EbN0 and rate. 
-	snr_dB = np.linspace(10, 12, datapoints)
-	for k in range(repeats):
-		j=0
-		for s_dB in snr_dB:
-			# channel capacity
-			snr = 10**(s_dB/20)
-			C = 0.5 * np.log2(1 + snr)
-			sparcparams = SPARCParams(L=L, M=M, sigma=None, p=P, r=R_sparc, t=64)#, a=R_sparc/C, C=C, f=R_sparc/C)
-			I_e = np.zeros(x_axis_points)
-			i=0
-			for I_a in I_a_range:
-				a = None
-				if export==True: # if export if false, we already have these values.
-					# randomly generate bits
-					X = gen_bits(int(L*logm))
-					#print(X)
-
-					# generate the histograms for E and some statistics about them
-					E = calc_E(X, I_a, s_dB, sparcparams, threshold=0.7)#, csv_filename='E_data_hardinit_LM512R1P4Bins125Threshold0_45.csv')
-				else:	
-					# get the required entry by using a key which is 'I_a s_dB k' where k is the current repetition
-					a = imported_E_dict[str(np.round(I_a,1))+' '+str(int(np.round(s_dB)))+' '+str(k)]
-
-					X = a.X
-					assert(len(X)==int(L*logm))
-					E = a.E
-					if(len(E)!=int(L*logm)): print("i: ", i, "I_A:", I_a, "j: ", j)
-					assert(len(E)==int(L*logm))
-				#print('X[0] is: ', X[0])
-				#print("E[0] is: ", E[0])
-				PE_pos, PE_neg, mean_pos, mean_neg, var_pos, var_neg, bin_width = hist_E(X, E, bin_number=bin_number, max_bin=60, min_bin=-60)#, plot=True, snr_dB=s_dB)
-	
-				# calculate I_e
-				I_e[i] = calc_I_e(PE_pos, PE_neg, bin_width)
-				i=i+1
-			I_e_accum[j,:] = I_e_accum[j,:] + I_e
-			j=j+1
-	I_e_accum = I_e_accum/repeats
-	# calculate the polynomial coefficients for the 3rd order polynomial representation of the exit curve
-	curve=0
-	poly_coeff = polynomial(I_a_range, I_e_accum[curve,:]) 
-	# Note that this will give the constant first and the coefficient of I_a**3 last
-	print("The coefficients for the polynomial are: ",poly_coeff)
-	print("Wall clock time elapsed: ", time.time()-t0)
-
-	plt.figure(1)
-	fig, ax = plt.subplots()
-	ax.plot(I_a_range, I_e_accum[0,:], 'b--', label='$SNR$='+str(snr_dB[0])+'$dB$')	
-	ax.plot(I_a_range, I_e_accum[1,:], 'k--', label='$SNR$='+str(snr_dB[1])+'$dB$')
-	ax.plot(I_a_range, I_e_accum[2,:], 'm--', label='$SNR$='+str(snr_dB[2])+'$dB$')
-	#ax.plot(I_a_range, I_e_accum[3,:], 'c--', label='$SNR$='+str(snr_dB[3])+'$dB$')
-	#ax.plot(I_a_range, I_e_accum[4,:], 'r--', label='$SNR$='+str(snr_dB[4])+'$dB$')
-	plt.xlabel('$I_A$')
-	plt.ylabel('$I_E$')
-	plt.legend(loc=6, prop={'size': 7})
-	#plt.title("The EXIT chart for the AMP decoder")
-	#plt.savefig('amp_exitchart_L128_M4_40reps_500bins_r1_5_P2.png')	
-	#plt.savefig('amp_exit_threshold_L256M32R1P4Bins350Threshold0_99_200reps.pdf')	
-	
-	plt.figure(2)
-	fig, ax = plt.subplots()
-	ax.plot(I_a_range, I_e_accum[curve,:], 'k--', label='$SNR$='+str(snr_dB[curve])+'$dB$')
-	# plot the polynomial representation of this exit curve 
-	I_A_amp = np.linspace(0,1,101).reshape(-1,1)
-	ones = np.ones((101, 1))
-	# multiply the polynomial coefficients by the different values of I_A_amp and it's powers
-	I_E_amp = np.sum(poly_coeff * np.concatenate((ones, I_A_amp, I_A_amp**2, I_A_amp**3),axis=1), axis=1)
-	ax.plot(I_A_amp, I_E_amp, 'r--', label='Polynomial fit to EXIT chart')
-	
-	plt.xlabel('$I_A$')
-	plt.ylabel('$I_E$')
-	plt.legend(loc=6, prop={'size': 7})
-	plt.title(str(poly_coeff))
-	plt.show()
-	#plt.savefig('polynomial_threshold_L256M32R1P4Bins350Threshold0_7_200reps_Plcorrect.pdf')
-	
 	'''
 	#############################
 	# plot histogram of the sectionwise probabilities for the correct position

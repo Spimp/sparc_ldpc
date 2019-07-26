@@ -20,15 +20,26 @@ class ParityMatrix:
 		# later causing K to not be an integer
 		return np.round(dv_bar, decimals=4)
 
-	# N and K are the dimensions of the LDPC code
-	# This function calculates the parity check matrix 
 	def generate(self, N, K):
+		"""
+		Produces a parity check matrix made up of ones and zeros
+		N: number of columns
+		K: number of rows
+		"""
 		# the CND distribution is check regular. Use this to keep track of how many 1s you
 		# still need in each row 
 		dcnd = np.ones(N-K)*self.d_c
-		# randomly sample the VND distribution from a_v
-		dvnd = np.random.choice(self.dv_degrees, size=N, p=a_v)
-		print("dvnd is: ", dvnd)
+		# generate VND according to the distribution a_v
+		# calculate how many rows we should have of each 
+		dv_count = np.round(a_v * N)
+		assert np.sum(dv_count)==N
+		# the degree of each variable node
+		dvnd = np.concatenate((np.repeat(self.dv_degrees[0], dv_count[0]), np.repeat(self.dv_degrees[1], dv_count[1]), np.repeat(self.dv_degrees[2], dv_count[2])))
+		print("The degree of each variable node: ", dvnd)
+		rng = np.random.RandomState()
+		# randomly shuffle the order of dvnd
+		rng.shuffle(dvnd)
+		print("The degree of each variable node after shuffling is: ", dvnd)
 		# if there aren't enough rows to satisfy some of the required degrees
 		if N-K<np.amax(self.dv_degrees):
 			print("Please choose an N-K greater than ", np.amax(self.dv_degrees))
@@ -64,28 +75,12 @@ class ParityMatrix:
 		# N and K must be divisible by 3, 4 or 5 and must desirably not be too small to ensure
 		# all dv degrees get included in the parity check matrix. 
 	def generate_protograph(self, N, K):
-		# to generate a protograph we must divide N and N-K by 3 or more so that
-		# producing the desired parity check matrix involves using a z of 3 or greater
-		# where z is the dimension of the shifted identity or zero matrix that replaces 
-		# each entry in a parity check matrix. 
-		# n and n-k are the dimensions of the protograph matrix 
-		# z is the required dimension of the shifted/zero matrices to give Nx(N-K) parity matrix
-		if N%3==0 and (N-K)%3==0:
-			n=N/3
-			k=K/3
-			z=3
-		elif N%4==0 and (N-K)%4==0:
-			n=N/4
-			k=K/4
-			z=4
-		elif N%5==0 and (N-K)%5==0:
-			n=N/5
-			k=K/5
-			z=5
-		else:
-			print("choose a different value of N and K")
-			return 
-		parity = self.generate(int(n), int(k))
+		"""
+		Produces a protograph matrix with N columns and K rows.
+		N: number of columns. Choose this so that L*log2(M) is divisible by N for the SPARC code you're using. 
+		K: number of rows 
+		"""
+		parity = self.generate(int(N), int(K))
 		# replace all zeros by -1, i.e. the all zero matrix. 
 		np.place(parity, parity==0, -1)
 		#print(parity)
@@ -97,19 +92,24 @@ class ParityMatrix:
 		proto_shift = np.random.choice(np.arange(0,100), size=total_ones)
 		# replace all ones by a random permatation to produce the protograph matrix
 		parity[idx_ones]=proto_shift
-		return parity.astype(int), z
+		return parity.astype(int)
 
 
-##################### Testing generate() and generate_protograph()
-dv_degrees = np.array([2, 7, 12])
-a_v = np.array([0.8, 0.1, 0.1])
-d_c = 7
+##################### Generating a protograph matrix for a given LDPC code
+dv_degrees = np.array([2, 5, 12])
+a_v = np.array([0.65, 0.25, 0.1])
+d_c = 6
 pm = ParityMatrix(dv_degrees, a_v, d_c)
 dv_bar=pm.dv_bar
-N=1280/8
+# N will be the number of columns in the parity check matrix. 
+# Ensure that N divides L*log2(M) for the SPARC being used. 
+N=40
 print(dv_bar)
+# equation for K preserves rate
 K=N-(dv_bar*N/d_c)
-print(K)
+# want to ensure K is an integer
+print("K is: ", K)
+print("rate is: ", K/N)
 #print(pm.generate(N, int(K)))
 np.set_printoptions(threshold=np.nan)
 print(pm.generate_protograph(N,int(K)))
